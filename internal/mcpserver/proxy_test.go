@@ -21,6 +21,11 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/upstream"
 )
 
+const (
+	echoToolName = "echo"
+	otpArg       = "otp"
+)
+
 type fakeNotifier struct {
 	mu    sync.Mutex
 	calls []*store.Challenge
@@ -43,7 +48,7 @@ func (f *fakeNotifier) last() *store.Challenge {
 func echoUpstream(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := mcp.NewServer(&mcp.Implementation{Name: "echo-upstream", Version: "dev"}, nil)
-	mcp.AddTool(srv, &mcp.Tool{Name: "echo", Description: "echo text"},
+	mcp.AddTool(srv, &mcp.Tool{Name: echoToolName, Description: "echo text"},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			Text string `json:"text"`
 		}) (*mcp.CallToolResult, any, error) {
@@ -58,7 +63,7 @@ func echoUpstream(t *testing.T) *httptest.Server {
 	return ts
 }
 
-func newTestProxy(t *testing.T, upstreamURL string) (*Proxy, *gate.Gate, *fakeNotifier, *store.Key) {
+func newTestProxy(t *testing.T, upstreamURL string) (*Proxy, *fakeNotifier, *store.Key) {
 	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "proxy.db"))
@@ -83,7 +88,7 @@ func newTestProxy(t *testing.T, upstreamURL string) (*Proxy, *gate.Gate, *fakeNo
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pool := upstream.NewPool([]config.UpstreamConfig{{Name: "echo", URL: upstreamURL}}, st, nil, logger)
 	proxy := New(pool, g, metrics.New(nil), logger)
-	return proxy, g, ntf, key
+	return proxy, ntf, key
 }
 
 func connectClient(t *testing.T, srv *mcp.Server) *mcp.ClientSession {
@@ -116,7 +121,7 @@ func callText(t *testing.T, sess *mcp.ClientSession, name string, args map[strin
 
 func TestProxyGateFlow(t *testing.T) {
 	ts := echoUpstream(t)
-	proxy, _, ntf, key := newTestProxy(t, ts.URL)
+	proxy, ntf, key := newTestProxy(t, ts.URL)
 	srv, err := proxy.ServerFor(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
@@ -131,24 +136,25 @@ func TestProxyGateFlow(t *testing.T) {
 	for _, tool := range res.Tools {
 		names[tool.Name] = true
 	}
-	if !names["echo__echo"] || !names[AuthToolName] {
+	if !names["echo__"+echoToolName] || !names[AuthToolName] {
 		t.Fatalf("tools: %v", names)
 	}
 
-	msg, isErr := callText(t, sess, "echo__echo", map[string]any{"text": "hi"})
-	if !isErr || !strings.Contains(msg, "requires a one-time code") || !strings.Contains(msg, `"echo__echo"`) {
+	msg, isErr := callText(t, sess, "echo__"+echoToolName, map[string]any{"text": "hi"})
+	if !isErr || !strings.Contains(msg, "requires a one-time code") || !strings.Contains(msg, `"echo__`+echoToolName+`"`) {
 		t.Fatalf("blocked message: %q (isErr=%v)", msg, isErr)
 	}
 	otp := ntf.last().PendingOTP
 
-	if msg, isErr := callText(t, sess, AuthToolName, map[string]any{"otp": "00000"}); !isErr || !strings.Contains(msg, "Wrong") {
+	msg, isErr = callText(t, sess, AuthToolName, map[string]any{otpArg: "00000"})
+	if !isErr || !strings.Contains(msg, "Wrong") {
 		t.Fatalf("wrong otp: %q", msg)
 	}
-	msg, isErr = callText(t, sess, AuthToolName, map[string]any{"otp": otp})
+	msg, isErr = callText(t, sess, AuthToolName, map[string]any{otpArg: otp})
 	if isErr || !strings.Contains(msg, "Session authorized until") {
 		t.Fatalf("auth: %q (isErr=%v)", msg, isErr)
 	}
-	msg, isErr = callText(t, sess, "echo__echo", map[string]any{"text": "hi"})
+	msg, isErr = callText(t, sess, "echo__"+echoToolName, map[string]any{"text": "hi"})
 	if isErr || !strings.Contains(msg, "echo: hi") {
 		t.Fatalf("retry after auth: %q (isErr=%v)", msg, isErr)
 	}
@@ -156,7 +162,7 @@ func TestProxyGateFlow(t *testing.T) {
 
 func TestAuthToolSchema(t *testing.T) {
 	ts := echoUpstream(t)
-	proxy, _, _, key := newTestProxy(t, ts.URL)
+	proxy, _, key := newTestProxy(t, ts.URL)
 	srv, err := proxy.ServerFor(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)

@@ -1,6 +1,10 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
 project_name: mcp-auth-proxy
+
+# No `before` hooks on purpose: CI already verifies `gofmt`, `goimports` and
+# `go mod tidy` cleanliness, so the release must never mutate the tagged tree.
 
 builds:
   - id: mcp-auth-proxy
@@ -8,23 +12,99 @@ builds:
     binary: mcp-auth-proxy
     env:
       - CGO_ENABLED=0
-    goos: [linux, darwin]
-    goarch: [amd64, arm64]
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: mcp-auth-proxy
-    formats: [tar.gz]
+  - id: default
+    ids:
+      - mcp-auth-proxy
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
       - README.md
       - config.example.yaml
 
 checksum:
-  name_template: "SHA256SUMS"
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+
+# Keyless cosign signature over the checksum file, in cosign v3's bundle format.
+#
+# Verify a download with:
+#   cosign verify-blob --bundle mcp-auth-proxy_<version>_SHA256SUMS.bundle \
+#     --certificate-identity-regexp 'https://github.com/tamcore/mcp-auth-proxy/.*' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+#     mcp-auth-proxy_<version>_SHA256SUMS
+signs:
+  - id: cosign-checksums
+    cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.bundle"
+    output: true
+    args:
+      - sign-blob
+      - "--yes"
+      - "--bundle=${signature}"
+      - "${artifact}"
+
+dockers_v2:
+  - id: ghcr
+    ids:
+      - mcp-auth-proxy
+    images:
+      - "ghcr.io/tamcore/mcp-auth-proxy"
+    dockerfile: Dockerfile
+    # The Dockerfile COPYs LICENSE, so it must be in the build context that
+    # GoReleaser assembles; only the binaries are there by default.
+    extra_files:
+      - LICENSE
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}"
+      - "{{ .Major }}.{{ .Minor }}"
+      - latest
+    labels:
+      org.opencontainers.image.created: "{{ .CommitDate }}"
+      org.opencontainers.image.name: "{{ .ProjectName }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: "{{ .GitURL }}"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Other changes
+      order: 99
 
 release:
-  disable: true
+  draft: false
+  prerelease: auto

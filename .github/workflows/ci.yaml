@@ -111,7 +111,8 @@ jobs:
           go-version-file: go.mod
 
       - name: Build garmin-mcp
-        run: go build -o /tmp/garmin-mcp ./garmin-mcp/cmd/garmin-mcp
+        working-directory: garmin-mcp
+        run: go build -o /tmp/garmin-mcp ./cmd/garmin-mcp
 
       - name: Live tests
         env:

@@ -1,0 +1,55 @@
+# mcp-auth-proxy configuration. Every key can be overridden by an environment
+# variable prefixed with MCP_PROXY_ (dots become underscores), e.g.
+# MCP_PROXY_SESSION_TTL=4h or MCP_PROXY_NTFY_TOPIC=mytopic.
+
+# Canonical public URL of this proxy. Used to build approve/deny button URLs
+# and the MCP URL shown by `key create`.
+base_url: http://127.0.0.1:8080
+
+# Listen address of the HTTP server.
+listen_addr: 127.0.0.1:8080
+
+# State directory: holds proxy.db and sign.secret (mode 0600).
+state_dir: ./data
+
+# How long a session stays valid after a successful auth (per-key override via
+# `key create --ttl`).
+session_ttl: 8h
+
+otp:
+  digits: 5            # one-time code length
+  expiry: 3m           # code lifetime
+  attempts: 3          # wrong attempts before the challenge is exhausted
+  renotify_floor: 30s  # a new blocked call within this window does not re-push
+
+ntfy:
+  url: https://ntfy.sh
+  topic: my-private-topic   # required when enabled
+  enabled: false            # when false, notifications are only logged
+
+# Upstream MCP servers. Each has exactly one of `url` (Streamable HTTP) or
+# `command` (stdio). Tools are exposed to clients as {name}__{tool}.
+upstreams:
+  - name: echo
+    command: ["mcp-auth-proxy", "dev-echo"]   # demo upstream
+  # - name: remote
+  #   url: https://mcp.example.com/mcp
+  #   headers:
+  #     X-Custom: value
+  #   oauth:               # optional: `upstream link remote` once, then tokens
+  #     authorize_url: https://idp.example.com/authorize   # are refreshed and
+  #     token_url: https://idp.example.com/token           # persisted for you
+  #     client_id: my-client-id
+  #     scopes: ["mcp:read", "mcp:write"]
+
+# Client-facing OAuth authorization server (authorization-code + PKCE S256).
+# Logging in grants identity only; every tool call still needs the OTP.
+oauth:
+  token_ttl: 24h             # map_ access token lifetime
+  authorize_code_ttl: 10m    # single-use authorization code lifetime
+  clients:
+    - client_id: claude
+      name: Claude
+      redirect_uris:
+        - https://claude.ai/api/mcp/callback
+      confidential: false

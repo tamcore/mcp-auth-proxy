@@ -50,6 +50,8 @@ internal/
   metrics/               prometheus with a closed label vocabulary
 migrations/              embedded SQL, forward-only
 e2e/                     end-to-end tests (build tag: e2e)
+live/                    live tests against a real upstream (build tag: live; needs LIVE_GARMIN_BIN)
+charts/mcp-auth-proxy/   Helm chart (single-replica stateful deployment)
 ```
 
 ## Rules
@@ -82,4 +84,12 @@ golangci-lint run --build-tags e2e ./e2e/     # 0 issues
 ```
 
 CI additionally runs the test suite with `-race` (the local sandbox may lack
-gcc; see `.github/workflows/ci.yaml`).
+gcc; see `.github/workflows/ci.yaml`), the live suite against a freshly built
+garmin-mcp over stdio, and `helm lint`/`helm template` for the chart.
+
+Releases are cut by pushing a `v*` tag: `.github/workflows/release.yaml`
+re-runs CI as a gate, then GoReleaser builds archives + the GHCR image and
+cosign-signs the checksums keylessly, and the chart is packaged and pushed to
+`oci://ghcr.io/tamcore/charts`. Dependencies are kept current by Renovate
+(`.github/renovate.json`); security-relevant gomod bumps and all action SHA
+bumps require human review.

@@ -122,18 +122,36 @@ override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
 | `oauth.authorize_code_ttl` | `10m` | single-use authorization code lifetime |
 | `oauth.clients[]` | – | registered AS clients (`client_id`, `redirect_uris`, …) |
 
+## Kubernetes
+
+A Helm chart is in [charts/mcp-auth-proxy](charts/mcp-auth-proxy): a
+single-replica `Recreate` deployment (one SQLite database, one signing secret)
+with a PVC for `/data`, the config in a ConfigMap, and the ntfy topic in a
+Secret. Released charts are published to `oci://ghcr.io/tamcore/charts`.
+
+```sh
+helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
+  --set config.baseURL=https://mcp.example.com \
+  --set ntfy.enabled=true --set ntfy.topic=your-topic
+```
+
 ## Development
 
-Quality gates (CI runs these plus `-race`):
+Quality gates (CI runs these plus `-race`, the live suite against a real
+garmin-mcp over stdio, and `helm lint`/`helm template` on the chart):
 
 ```sh
 gofmt -l .                                   # empty
 go build ./...
-go vet ./...  &&  go vet -tags e2e ./e2e/
+go vet ./...  &&  go vet -tags e2e ./e2e/  &&  go vet -tags live ./live/
 go test -count=1 ./...
 go test -tags e2e -count=1 -timeout 300s ./e2e/
+LIVE_GARMIN_BIN=/path/to/garmin-mcp go test -tags live -count=1 -timeout 300s ./live/
 go mod tidy
-golangci-lint run  &&  golangci-lint run --build-tags e2e ./e2e/
+golangci-lint run
+golangci-lint run --build-tags e2e ./e2e/
+golangci-lint run --build-tags live ./live/
+helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example
 ```
 
 ## License

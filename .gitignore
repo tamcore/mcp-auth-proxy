@@ -1,0 +1,6 @@
+mcp-auth-proxy
+/dist/
+/data/
+config.yaml
+*.db
+*.db-*

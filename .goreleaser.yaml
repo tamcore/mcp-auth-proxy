@@ -1,0 +1,30 @@
+version: 2
+
+project_name: mcp-auth-proxy
+
+builds:
+  - id: mcp-auth-proxy
+    main: ./cmd/mcp-auth-proxy
+    binary: mcp-auth-proxy
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}}
+
+archives:
+  - id: mcp-auth-proxy
+    formats: [tar.gz]
+    files:
+      - LICENSE
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: "SHA256SUMS"
+
+release:
+  disable: true

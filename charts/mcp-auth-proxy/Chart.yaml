@@ -1,0 +1,16 @@
+apiVersion: v2
+name: mcp-auth-proxy
+description: Personal MCP auth proxy with one-time-code tool gates
+type: application
+# version and appVersion are placeholders. The release workflow passes the tag
+# through `helm package --version/--app-version`, so the committed values are
+# never the published ones and must not drift into looking authoritative.
+version: 0.0.0
+appVersion: "v0.0.0"
+home: https://github.com/tamcore/mcp-auth-proxy
+sources:
+  - https://github.com/tamcore/mcp-auth-proxy
+keywords:
+  - mcp
+  - auth
+  - proxy

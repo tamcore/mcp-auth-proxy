@@ -1,0 +1,19 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "mcp-auth-proxy.fullname" . }}
+  labels:
+    {{- include "mcp-auth-proxy.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mcp-auth-proxy.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}

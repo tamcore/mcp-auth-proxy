@@ -1,0 +1,82 @@
+# mcp-auth-proxy — single-replica stateful deployment.
+#
+# The proxy keeps one SQLite database and the HMAC signing secret, so it is
+# stateful and single-writer: the chart runs exactly one replica against one
+# PVC and does not expose a replica count.
+
+image:
+  repository: ghcr.io/tamcore/mcp-auth-proxy
+  # tag defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# The proxy serves /mcp, /oauth/*, /approve, /deny and /metrics on the same
+# port. The metrics endpoint is unauthenticated but carries only aggregate
+# counters with a closed label vocabulary; keep the Service ClusterIP-only
+# unless the MCP endpoint itself is meant to be public.
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    additionalLabels: {}
+
+config:
+  # Canonical public URL: used for approve/deny button URLs and the MCP URL
+  # printed by `key create`. Required.
+  baseURL: ""
+  listenAddr: "0.0.0.0:8080"
+  sessionTTL: 8h
+  logLevel: info
+  # Upstream MCP servers, as YAML. Each entry has a name and exactly one of
+  # url (streamable HTTP) or command (stdio).
+  upstreams: []
+  #   - name: echo
+  #     command: ["mcp-auth-proxy", "dev-echo"]
+  # Client-facing OAuth clients of the proxy's authorization server.
+  oauthClients: []
+  #   - client_id: claude
+  #     name: Claude
+  #     redirect_uris: ["https://claude.ai/api/mcp/callback"]
+
+ntfy:
+  # When enabled, the one-time code is pushed to this topic. The topic is a
+  # credential-like value, so it goes into a Secret, never the ConfigMap.
+  enabled: false
+  url: https://ntfy.sh
+  topic: ""
+  existingSecret: ""
+  existingSecretKey: MCP_PROXY_NTFY_TOPIC
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  storageClass: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: mcp-auth-proxy.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+podAnnotations: {}
+podLabels: {}

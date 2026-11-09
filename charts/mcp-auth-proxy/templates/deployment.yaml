@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-auth-proxy.fullname" . }}
+  labels:
+    {{- include "mcp-auth-proxy.labels" . | nindent 4 }}
+spec:
+  # One replica, and Recreate rather than RollingUpdate: the state is one
+  # SQLite database plus the signing secret, both single-writer, so two pods
+  # must never hold /data at once — not even for the overlap of a rollout.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "mcp-auth-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
+        checksum/ntfy: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mcp-auth-proxy.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mcp-auth-proxy.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        # fsGroup never changes the mount root's owner, so the state directory
+        # is the volume root here and the process creates its files 0600.
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "mcp-auth-proxy.fullname" . }}
+            {{- if and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
+            - secretRef:
+                name: {{ .Values.ntfy.existingSecret }}
+            {{- end }}
+            {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
+            - secretRef:
+                name: {{ include "mcp-auth-proxy.fullname" . }}-ntfy
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mcp-auth-proxy
+              readOnly: true
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "mcp-auth-proxy.fullname" . }}
+        - name: data
+          {{- if .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ include "mcp-auth-proxy.fullname" . }}-data
+          {{- end }}

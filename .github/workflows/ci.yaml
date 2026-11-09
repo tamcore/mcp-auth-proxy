@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
+  # The release workflow re-runs every gate before it publishes anything.
   workflow_call:
 
 permissions:
@@ -16,7 +17,7 @@ concurrency:
 
 env:
   # Pinned tool versions. CI must never resolve a floating "latest".
-  GOLANGCI_LINT_VERSION: v2.15.0
+  GOLANGCI_LINT_VERSION: v2.15.0 # renovate: datasource=github-releases depName=golangci/golangci-lint
 
 jobs:
   verify:
@@ -42,7 +43,7 @@ jobs:
           git diff --exit-code -- go.mod go.sum
 
       - name: go vet
-        run: go vet ./... && go vet -tags e2e ./e2e/
+        run: go vet ./... && go vet -tags e2e ./e2e/ && go vet -tags live ./live/
 
       - name: go vet for every supported GOOS
         run: |
@@ -55,7 +56,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -64,8 +65,10 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
 
-      - name: Lint e2e (build tag)
-        run: golangci-lint run --build-tags e2e ./e2e/
+      - name: Lint e2e and live (build tags)
+        run: |
+          golangci-lint run --build-tags e2e ./e2e/
+          golangci-lint run --build-tags live ./live/
 
   test:
     name: Test
@@ -93,6 +96,27 @@ jobs:
 
       - name: E2E tests (with -race)
         run: go test -race -tags e2e -count=1 -timeout 300s ./e2e/
+
+  live:
+    name: Live (real garmin-mcp upstream via stdio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: tamcore/garmin-mcp
+          path: garmin-mcp
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build garmin-mcp
+        run: go build -o /tmp/garmin-mcp ./garmin-mcp/cmd/garmin-mcp
+
+      - name: Live tests
+        env:
+          LIVE_GARMIN_BIN: /tmp/garmin-mcp
+        run: go test -tags live -count=1 -timeout 300s ./live/
 
   build:
     name: Build

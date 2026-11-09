@@ -1,4 +1,4 @@
-mcp-auth-proxy
+/mcp-auth-proxy
 /dist/
 /data/
 config.yaml

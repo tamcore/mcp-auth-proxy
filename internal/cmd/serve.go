@@ -1,0 +1,93 @@
+package cmd
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/gate"
+	"github.com/tamcore/mcp-auth-proxy/internal/mcpserver"
+	"github.com/tamcore/mcp-auth-proxy/internal/metrics"
+	"github.com/tamcore/mcp-auth-proxy/internal/ntfy"
+	"github.com/tamcore/mcp-auth-proxy/internal/server"
+	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/upstream"
+)
+
+func newServeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "serve",
+		Short: "Run the auth proxy HTTP server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runServe(cmd)
+		},
+	}
+}
+
+func runServe(cmd *cobra.Command) error {
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	cfg, err := loadConfig(cmd)
+	if err != nil {
+		return err
+	}
+	logger := newLogger()
+	st, err := openStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
+		return err
+	}
+	secret, err := store.EnsureSignSecret(cfg.StateDir)
+	if err != nil {
+		return err
+	}
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	var pub ntfy.Publisher
+	if cfg.Ntfy.Enabled {
+		pub = ntfy.NewHTTPPublisher(cfg.Ntfy.URL, httpClient)
+	} else {
+		pub = ntfy.NewLogPublisher(logger)
+	}
+	g := gate.New(gate.Options{
+		Store:         st,
+		Digits:        cfg.OTP.Digits,
+		Expiry:        cfg.OTP.Expiry,
+		MaxAttempts:   cfg.OTP.Attempts,
+		RenotifyFloor: cfg.OTP.RenotifyFloor,
+		DefaultTTL:    cfg.SessionTTL,
+		BaseURL:       cfg.BaseURL,
+		SignSecret:    secret,
+	})
+	m := metrics.New(nil)
+	g.OnChallenge = m.Challenge
+	g.SetNotifier(ntfy.NewNotifier(pub, cfg.Ntfy.Topic, g.ApproveURL, g.DenyURL))
+	pool := upstream.NewPool(cfg.Upstreams, st, httpClient, logger)
+	proxy := mcpserver.New(pool, g, m, logger)
+	srv, err := server.New(ctx, cfg, st, g, proxy, m, logger)
+	if err != nil {
+		return err
+	}
+	httpSrv := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("listening", "addr", cfg.ListenAddr, "base_url", cfg.BaseURL)
+		errCh <- httpSrv.ListenAndServe()
+	}()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return errors.Join(httpSrv.Shutdown(shutdownCtx), <-errCh)
+	case err := <-errCh:
+		return err
+	}
+}

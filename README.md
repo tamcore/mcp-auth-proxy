@@ -26,7 +26,8 @@ web UI except once, right after an admin mints one.
 At `{base_url}/login` a user logs in with username+password only and reaches a
 self-contained portal (same-origin CSS and JS only, no external assets; light,
 dark, or auto theme, auto follows the system and is the default) to: create API keys for
-globally configured MCP servers available to them, run the OAuth flow for
+globally configured MCP servers available to them (and change a key's servers
+later; each key shows when it was last seen and last succeeded), run the OAuth flow for
 registered clients, add their **own** MCP servers (stored in the database,
 visible only to them), and view their **audit log** — which client called which
 tool with which parameters (responses optional via `audit.log_responses`,
@@ -133,7 +134,9 @@ mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake
 
 HTTP routes: `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (path auth),
 `/oauth/authorize`, `/oauth/consent`, `/oauth/token`, `/approve/{id}?sig=`,
-`/deny/{id}?sig=`, the web UI. The ops listener (`ops_listen_addr`) serves
+`/deny/{id}?sig=`, the web UI. `serve` logs JSON to stdout: one `http request`
+line per request (credential path segments redacted, no query string) and one
+`tool call` line per audit entry. The ops listener (`ops_listen_addr`) serves
 `/metrics`, `/healthz` and `/readyz` (database reachable) only; never expose it.
 
 ## Configuration reference

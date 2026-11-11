@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,12 +91,7 @@ func (u *UpstreamConfig) Allows(username string) bool {
 	if u.Global() {
 		return true
 	}
-	for _, name := range u.Users {
-		if name == username {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(u.Users, username)
 }
 
 // UpstreamOAuthConfig is the OAuth client registration for an upstream that

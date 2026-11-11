@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
@@ -130,12 +131,7 @@ func (s *Server) validateAuthorize(ctx context.Context, q url.Values) (*authoriz
 }
 
 func exactMatch(registered []string, want string) bool {
-	for _, u := range registered {
-		if u == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(registered, want)
 }
 
 // HandleConsent serves POST /oauth/consent: on approval it creates the OAuth

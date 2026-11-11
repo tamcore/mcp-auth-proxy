@@ -52,7 +52,7 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	logger := newLogger()
+	logger := newServeLogger()
 	st, err := openStore(ctx, cfg)
 	if err != nil {
 		return err

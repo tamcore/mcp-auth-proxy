@@ -60,9 +60,9 @@ func gotoPath(t *testing.T, page playwright.Page, path string) {
 
 // uiAcceptInvite opens the user's invite link from the server log and sets a
 // password, leaving the page logged in on the portal.
-func uiAcceptInvite(t *testing.T, page playwright.Page, stderr *lockedBuffer, user string) {
+func uiAcceptInvite(t *testing.T, page playwright.Page, logs *lockedBuffer, user string) {
 	t.Helper()
-	gotoPath(t, page, inviteURL(t, stderr, user))
+	gotoPath(t, page, inviteURL(t, logs, user))
 	must(t, page.Locator("#password").Fill(user+"-password-1"))
 	must(t, page.Locator("#password2").Fill(user+"-password-1"))
 	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Set password and log in"}).Click())
@@ -79,11 +79,11 @@ func attr(t *testing.T, page playwright.Page, selector, name string) string {
 }
 
 func TestUIPortalFlow(t *testing.T) {
-	e, stderr := startMultiUserEnv(t)
+	e, logs := startMultiUserEnv(t)
 	page := newPage(t, e, playwright.BrowserNewContextOptions{
 		Permissions: []string{"clipboard-read", "clipboard-write"},
 	})
-	uiAcceptInvite(t, page, stderr, "alice")
+	uiAcceptInvite(t, page, logs, "alice")
 	must(t, expect.Locator(page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Admin"})).ToBeVisible())
 
 	must(t, page.Locator("#label").Fill("laptop"))
@@ -150,9 +150,9 @@ func uiApproveFromPhone(t *testing.T, e *env, page playwright.Page, token string
 }
 
 func TestUINonAdminAndConsent(t *testing.T) {
-	e, stderr := startMultiUserEnv(t)
+	e, logs := startMultiUserEnv(t)
 	page := newPage(t, e, playwright.BrowserNewContextOptions{})
-	uiAcceptInvite(t, page, stderr, "bob")
+	uiAcceptInvite(t, page, logs, "bob")
 	must(t, expect.Locator(page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Admin"})).ToHaveCount(0))
 
 	gotoPath(t, page, "/oauth/authorize?response_type=code&client_id=e2e&redirect_uri=http%3A%2F%2F127.0.0.1%3A1%2Fcb"+
@@ -196,11 +196,11 @@ func bodyBackground(t *testing.T, page playwright.Page) string {
 }
 
 func TestUIMobileNoHorizontalScroll(t *testing.T) {
-	e, stderr := startMultiUserEnv(t)
+	e, logs := startMultiUserEnv(t)
 	page := newPage(t, e, playwright.BrowserNewContextOptions{
 		Viewport: &playwright.Size{Width: 375, Height: 800},
 	})
-	uiAcceptInvite(t, page, stderr, "alice")
+	uiAcceptInvite(t, page, logs, "alice")
 	must(t, page.Locator("#label").Fill("phone"))
 	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Create key"}).Click())
 	for _, path := range []string{"", "/portal/audit", "/admin"} {

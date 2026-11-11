@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// lockedBuffer is a goroutine-safe bytes.Buffer for capturing subprocess stderr.
+// lockedBuffer is a goroutine-safe bytes.Buffer for capturing subprocess logs.
 type lockedBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -38,7 +38,7 @@ func (b *lockedBuffer) String() string {
 }
 
 // startMultiUserEnv starts the proxy with two configured users, a global and an
-// alice-only upstream, and a fake ntfy. stderr is captured to recover the
+// alice-only upstream, and a fake ntfy. logs is captured to recover the
 // invite links.
 func startMultiUserEnv(t *testing.T) (*env, *lockedBuffer) {
 	t.Helper()
@@ -73,9 +73,10 @@ oauth:
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stderr := &lockedBuffer{}
+	logs := &lockedBuffer{}
 	cmd := exec.Command(binary, "serve", "--config", cfgPath)
-	cmd.Stderr = stderr
+	cmd.Stdout = logs
+	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ oauth:
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				return e, stderr
+				return e, logs
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -100,10 +101,10 @@ oauth:
 	return nil, nil
 }
 
-func inviteURL(t *testing.T, stderr *lockedBuffer, user string) string {
+func inviteURL(t *testing.T, logs *lockedBuffer, user string) string {
 	t.Helper()
 	re := regexp.MustCompile(`"user":"` + user + `","url":"([^"]+)"`)
-	m := re.FindStringSubmatch(stderr.String())
+	m := re.FindStringSubmatch(logs.String())
 	if m == nil {
 		t.Fatalf("no invite link for %s in logs", user)
 	}
@@ -143,11 +144,20 @@ func setPasswordViaInvite(t *testing.T, inviteURL, pw string) *http.Cookie {
 }
 
 func TestMultiUserPortalAndVisibility(t *testing.T) {
-	e, stderr := startMultiUserEnv(t)
-	cookie := setPasswordViaInvite(t, inviteURL(t, stderr, "alice"), "alice-password-1")
+	e, logs := startMultiUserEnv(t)
+	cookie := setPasswordViaInvite(t, inviteURL(t, logs, "alice"), "alice-password-1")
 	token := portalCreateKey(t, e, cookie, []string{"echo", "private"})
-	bobRejected(t, e, stderr)
+	bobRejected(t, e, logs)
 	toolsAndAudit(t, e, cookie, token)
+	out := logs.String()
+	for _, want := range []string{`"msg":"http request"`, `"path":"/mcp/[redacted]"`, `"msg":"tool call"`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("stdout log missing %s", want)
+		}
+	}
+	if strings.Contains(out, token) {
+		t.Fatal("stdout log leaks the key token")
+	}
 }
 
 // portalCreateKey creates a key through the portal and returns the token.
@@ -174,9 +184,9 @@ func portalCreateKey(t *testing.T, e *env, cookie *http.Cookie, upstreams []stri
 }
 
 // bobRejected verifies bob cannot use the alice-only upstream.
-func bobRejected(t *testing.T, e *env, stderr *lockedBuffer) {
+func bobRejected(t *testing.T, e *env, logs *lockedBuffer) {
 	t.Helper()
-	bobCookie := setPasswordViaInvite(t, inviteURL(t, stderr, "bob"), "bob-password-1")
+	bobCookie := setPasswordViaInvite(t, inviteURL(t, logs, "bob"), "bob-password-1")
 	form := url.Values{"label": {"x"}, "upstream": {"private"}}
 	req, _ := http.NewRequest(http.MethodPost, e.base+"/portal/key", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

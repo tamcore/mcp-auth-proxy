@@ -200,6 +200,12 @@ func (p *Proxy) audit(ctx context.Context, key *store.Key,
 			e.Response = &s
 		}
 	}
+	attrs := []any{"user_id", e.UserID, "key_id", e.KeyID, "key", e.KeyLabel, "tool", e.ToolName,
+		"arguments", e.Arguments, "is_error", res != nil && res.IsError}
+	if e.Response != nil {
+		attrs = append(attrs, "response", *e.Response)
+	}
+	p.logger.Info("tool call", attrs...)
 	if err := p.store.AppendAudit(ctx, e); err != nil {
 		p.logger.Error("append audit", "error", err)
 	}

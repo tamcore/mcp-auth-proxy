@@ -84,7 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
-	return mux
+	return accessLog(s.logger, mux)
 }
 
 // OpsHandler serves the ops endpoints: /metrics, /healthz (process up) and

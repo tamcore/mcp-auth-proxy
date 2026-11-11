@@ -1,7 +1,9 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -192,4 +194,23 @@ func TestAuthToolSchema(t *testing.T) {
 		return
 	}
 	t.Fatal("auth tool not found")
+}
+
+func TestAuditEntryIsLogged(t *testing.T) {
+	p, _, key := newTestProxy(t, echoUpstream(t).URL)
+	ctx := context.Background()
+	uid := "u_audit"
+	if err := p.store.CreateUser(ctx, &store.User{ID: uid, Username: "auditor", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	key.UserID = &uid
+	var buf bytes.Buffer
+	p.logger = slog.New(slog.NewJSONHandler(&buf, nil))
+	p.audit(ctx, key, "echo__echo", json.RawMessage(`{"text":"hi"}`), &mcp.CallToolResult{})
+	for _, want := range []string{`"msg":"tool call"`, `"tool":"echo__echo"`, `"user_id":"u_audit"`, `"key_id":"k_1"`,
+		`"arguments":"{\"text\":\"hi\"}"`} {
+		if !strings.Contains(buf.String(), want) {
+			t.Fatalf("audit log missing %s: %s", want, buf.String())
+		}
+	}
 }

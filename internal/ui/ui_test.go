@@ -122,3 +122,19 @@ func TestStatic(t *testing.T) {
 		t.Fatalf("unknown asset: %d", resp.StatusCode)
 	}
 }
+
+func TestNavMarksCurrentSection(t *testing.T) {
+	r := New(nil)
+	user := &User{Name: testUser, Admin: true}
+	for page, want := range map[string]string{
+		"portal":   `href="/" aria-current="page"`,
+		"audit":    `href="/portal/audit" aria-current="page"`,
+		"settings": `href="/settings" aria-current="page"`,
+		"admin":    `href="/admin" aria-current="page"`,
+	} {
+		_, body := render(t, r, page, Page{User: user, Data: map[string]any{}})
+		if !strings.Contains(body, want) || strings.Count(body, `aria-current="page"`) != 1 {
+			t.Fatalf("%s: want exactly one current link %q", page, want)
+		}
+	}
+}

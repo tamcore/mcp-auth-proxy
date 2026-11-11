@@ -35,6 +35,8 @@ type Page struct {
 	Title string
 	User  *User
 	Data  any
+	// Section is the rendered page name; Render sets it for the nav.
+	Section string
 }
 
 type asset struct {
@@ -72,6 +74,13 @@ func New(logger *slog.Logger) *Renderer {
 		"has":    slices.Contains[[]string],
 		"list":   func(v ...string) []string { return v },
 		"ptr":    func(t time.Time) *time.Time { return &t },
+		"initial": func(name string) string {
+			if name == "" {
+				return "?"
+			}
+			return string([]rune(name)[:1])
+		},
+		"navItems": navItems,
 		"when": func(t *time.Time) string {
 			if t == nil {
 				return "never"
@@ -101,6 +110,7 @@ func (r *Renderer) Render(w http.ResponseWriter, status int, name string, p Page
 		r.fail(w, fmt.Errorf("unknown page %q", name))
 		return
 	}
+	p.Section = name
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "layout", p); err != nil {
 		r.fail(w, err)
@@ -130,4 +140,21 @@ func (r *Renderer) Static() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
 	})
+}
+
+// navItem is one header tab; Section is the page name that marks it current.
+type navItem struct {
+	Href, Label, Section string
+}
+
+func navItems(admin bool) []navItem {
+	items := []navItem{
+		{"/", "Portal", "portal"},
+		{"/portal/audit", "Audit log", "audit"},
+		{"/settings", "Settings", "settings"},
+	}
+	if admin {
+		items = append(items, navItem{"/admin", "Admin", "admin"})
+	}
+	return items
 }

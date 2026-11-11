@@ -82,6 +82,9 @@ ingress:
 httpRoute:
   enabled: false
   annotations: {}
+  # Pin sectionName to the https listener: without it the route also attaches
+  # to the gateway's http listener, serves the app over plain http, and
+  # competes with httpsRedirect for the same host and path.
   parentRefs: []
   #   - name: my-gateway
   #     namespace: gateway-system

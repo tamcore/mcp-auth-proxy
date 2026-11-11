@@ -41,7 +41,7 @@ func (ui *WebUI) handleNotifySave(w http.ResponseWriter, r *http.Request) {
 	}
 	base, err := ntfy.Validate(r.Context(), nil, r.PostForm.Get("url"), topic, token)
 	if err != nil {
-		ui.renderPortalStatus(w, r, user, http.StatusBadRequest, "", "Push target not saved: "+err.Error())
+		ui.renderSettings(w, r, user, http.StatusBadRequest, "Push target not saved: "+err.Error(), "")
 		return
 	}
 	n := &store.UserNotify{UserID: user.ID, URL: base, Topic: topic, Token: token}
@@ -51,7 +51,7 @@ func (ui *WebUI) handleNotifySave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ui.logger.Info("push target saved", "user", user.Username, "url", base)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings?done=notify", http.StatusSeeOther)
 }
 
 func (ui *WebUI) handleNotifyDelete(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +64,7 @@ func (ui *WebUI) handleNotifyDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ui.logger.Info("push target removed", "user", user.Username)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
 // handlePendingIDs lets the portal poll for new or resolved requests.
@@ -87,12 +87,8 @@ func (ui *WebUI) handlePendingIDs(w http.ResponseWriter, r *http.Request) {
 
 // notifyAndPending fills the push target status and the pending requests.
 func (ui *WebUI) notifyAndPending(r *http.Request, user *store.User, d *view.PortalData) {
-	n, err := ui.store.GetUserNotify(r.Context(), user.ID)
-	switch {
-	case err == nil:
-		d.NotifyURL = n.URL
-	case !errors.Is(err, store.ErrNotFound):
-		ui.logger.Error("load push target", "user", user.Username, "error", err)
+	if _, err := ui.store.GetUserNotify(r.Context(), user.ID); errors.Is(err, store.ErrNotFound) {
+		d.NoPushTarget = true
 	}
 	if ui.approvals == nil {
 		return

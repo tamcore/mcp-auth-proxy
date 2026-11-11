@@ -143,10 +143,12 @@ func TestUIPortalFlow(t *testing.T) {
 func uiSetPushTarget(t *testing.T, e *env, page playwright.Page) {
 	t.Helper()
 	must(t, expect.Locator(page.GetByText("No push target set")).ToBeVisible())
+	must(t, page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Set one in Settings"}).Click())
 	must(t, page.Locator("#ntfy-url").Fill(e.ntfy.srv.URL))
 	must(t, page.Locator("#ntfy-topic").Fill("e2etopic"))
 	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Save and send test push"}).Click())
 	must(t, expect.Locator(page.GetByText("Codes for your keys go to")).ToBeVisible())
+	gotoPath(t, page, "/")
 }
 
 // uiApproveFromPhone triggers a blocked call, checks the push and the portal's
@@ -248,4 +250,48 @@ func TestUIMobileNoHorizontalScroll(t *testing.T) {
 			t.Fatalf("%q scrolls horizontally at 375px", path)
 		}
 	}
+}
+
+// addVirtualAuthenticator gives the page a platform authenticator that
+// always verifies the user.
+func addVirtualAuthenticator(t *testing.T, page playwright.Page) {
+	t.Helper()
+	cdp, err := page.Context().NewCDPSession(page)
+	must(t, err)
+	_, err = cdp.Send("WebAuthn.enable", map[string]any{})
+	must(t, err)
+	_, err = cdp.Send("WebAuthn.addVirtualAuthenticator", map[string]any{"options": map[string]any{
+		"protocol": "ctap2", "transport": "internal", "hasResidentKey": true,
+		"hasUserVerification": true, "isUserVerified": true, "automaticPresenceSimulation": true,
+	}})
+	must(t, err)
+}
+
+func TestUISettingsPasswordAndPasskeys(t *testing.T) {
+	e, logs := startMultiUserEnv(t)
+	page := newPage(t, e, playwright.BrowserNewContextOptions{})
+	addVirtualAuthenticator(t, page)
+	uiAcceptInvite(t, page, logs, "alice")
+
+	gotoPath(t, page, "/settings")
+	must(t, page.Locator("#passkey-name").Fill("e2e key"))
+	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Add passkey"}).Click())
+	must(t, expect.Locator(page.GetByText("Passkey added.")).ToBeVisible())
+	must(t, expect.Locator(page.GetByTestId("passkey")).ToContainText("e2e key"))
+
+	must(t, page.Locator("#current").Fill("alice-password-1"))
+	must(t, page.Locator("#new-password").Fill("alice-password-2"))
+	must(t, page.Locator("#new-password2").Fill("alice-password-2"))
+	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Change password"}).Click())
+	must(t, expect.Locator(page.GetByText("Password changed.")).ToBeVisible())
+
+	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Log out"}).Click())
+	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Sign in with a passkey"}).Click())
+	must(t, expect.Locator(page.GetByTestId("username")).ToHaveText("alice"))
+
+	gotoPath(t, page, "/settings")
+	must(t, expect.Locator(page.GetByTestId("passkey")).ToContainText("last used 20"))
+	must(t, page.GetByTestId("passkey").GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Delete"}).Click())
+	must(t, expect.Locator(page.GetByText("Passkey removed.")).ToBeVisible())
+	must(t, expect.Locator(page.GetByTestId("passkey")).ToHaveCount(0))
 }

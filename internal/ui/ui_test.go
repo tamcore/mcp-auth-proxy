@@ -44,7 +44,9 @@ func TestEveryPageRendersSelfContained(t *testing.T) {
 			Users:  []*store.User{{ID: "u1", Username: "bob"}},
 		}},
 		"consent": {Data: ConsentData{Client: "Claude", ClientID: "claude"}},
-		"result":  {Data: ResultData{Tone: ToneOK, Heading: "Approved", Message: "m"}},
+		"settings": {User: alice, Data: SettingsData{PasskeysEnabled: true, NotifyURL: "https://ntfy.sh",
+			Passkeys: []PasskeyView{{ID: "AQID", Name: "laptop", Created: time.Unix(0, 0).UTC()}}}},
+		"result": {Data: ResultData{Tone: ToneOK, Heading: "Approved", Message: "m"}},
 	}
 	for name, p := range pages {
 		code, body := render(t, r, name, p)

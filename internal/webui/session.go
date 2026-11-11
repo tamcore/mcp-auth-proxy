@@ -45,30 +45,51 @@ func (s *Sessions) sign(payload string) string {
 
 // Issue creates a cookie value for the user.
 func (s *Sessions) Issue(username string) string {
-	expiry := s.now().Add(sessionTTL).Unix()
+	return s.issueAt(username, s.now())
+}
+
+// IssueFor creates a login cookie for user that is never older than the
+// user's session cutoff, so a login right after a password change holds.
+func (s *Sessions) IssueFor(user *store.User) string {
+	t := s.now()
+	if user.SessionsSince != nil && t.Before(*user.SessionsSince) {
+		t = *user.SessionsSince
+	}
+	return s.issueAt(user.Username, t)
+}
+
+// issueAt creates a cookie value that counts as issued at t.
+func (s *Sessions) issueAt(username string, t time.Time) string {
+	expiry := t.Add(sessionTTL).Unix()
 	payload := base64.RawURLEncoding.EncodeToString([]byte(username)) + "." + strconv.FormatInt(expiry, 10)
 	return payload + "." + s.sign(payload)
 }
 
 // Verify checks a cookie value and returns the username.
 func (s *Sessions) Verify(value string) (string, bool) {
+	name, _, ok := s.verify(value)
+	return name, ok
+}
+
+// verify also returns when the cookie was issued (expiry minus the TTL).
+func (s *Sessions) verify(value string) (string, int64, bool) {
 	parts := strings.Split(value, ".")
 	if len(parts) != 3 {
-		return "", false
+		return "", 0, false
 	}
 	payload := parts[0] + "." + parts[1]
 	if !hmac.Equal([]byte(s.sign(payload)), []byte(parts[2])) {
-		return "", false
+		return "", 0, false
 	}
 	expiry, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil || s.now().Unix() > expiry {
-		return "", false
+		return "", 0, false
 	}
 	name, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return "", false
+		return "", 0, false
 	}
-	return string(name), true
+	return string(name), expiry - int64(sessionTTL/time.Second), true
 }
 
 // User resolves the request's session cookie to a store user.
@@ -77,12 +98,15 @@ func (s *Sessions) User(r *http.Request, st *store.Store) (*store.User, bool) {
 	if err != nil {
 		return nil, false
 	}
-	name, ok := s.Verify(c.Value)
+	name, issued, ok := s.verify(c.Value)
 	if !ok {
 		return nil, false
 	}
 	u, err := st.UserByName(r.Context(), name)
-	if err != nil {
+	if err != nil || u.Disabled {
+		return nil, false
+	}
+	if u.SessionsSince != nil && issued < u.SessionsSince.Unix() {
 		return nil, false
 	}
 	return u, true

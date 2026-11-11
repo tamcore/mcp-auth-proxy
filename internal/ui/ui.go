@@ -71,6 +71,7 @@ func New(logger *slog.Logger) *Renderer {
 		"themes": func() []string { return []string{"auto", "light", "dark"} },
 		"has":    slices.Contains[[]string],
 		"list":   func(v ...string) []string { return v },
+		"ptr":    func(t time.Time) *time.Time { return &t },
 		"when": func(t *time.Time) string {
 			if t == nil {
 				return "never"

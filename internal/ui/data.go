@@ -45,7 +45,7 @@ type Key struct {
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.
 type PortalData struct {
 	Error        string
-	NotifyURL    string
+	NoPushTarget bool
 	Pending      []Pending
 	NewToken     string
 	MCPEndpoint  string
@@ -65,6 +65,23 @@ type Pending struct {
 	Code       string
 	ApproveURL string
 	DenyURL    string
+}
+
+// PasskeyView is one passkey on the settings page; ID is base64url.
+type PasskeyView struct {
+	ID       string
+	Name     string
+	Created  time.Time
+	LastUsed *time.Time
+}
+
+// SettingsData feeds settings.tmpl.
+type SettingsData struct {
+	Error           string
+	Flash           string
+	NotifyURL       string
+	PasskeysEnabled bool
+	Passkeys        []PasskeyView
 }
 
 // AuditData feeds audit.tmpl.

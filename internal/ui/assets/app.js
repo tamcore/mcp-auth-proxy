@@ -52,6 +52,70 @@
     }
   };
 
+  const b64 = {
+    enc: (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+    dec: (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)).buffer,
+  };
+
+  const postJSON = async (url, body) => {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `request failed (${res.status})`);
+    return data;
+  };
+
+  const showError = (msg) => {
+    const el = document.querySelector("[data-passkey-error]");
+    if (el) {
+      el.textContent = msg;
+      el.hidden = false;
+    }
+  };
+
+  const addPasskey = async () => {
+    const { publicKey } = await postJSON("/settings/passkeys/begin");
+    publicKey.challenge = b64.dec(publicKey.challenge);
+    publicKey.user.id = b64.dec(publicKey.user.id);
+    for (const c of publicKey.excludeCredentials || []) c.id = b64.dec(c.id);
+    const cred = await navigator.credentials.create({ publicKey });
+    const name = document.getElementById("passkey-name")?.value || "";
+    const body = JSON.stringify({
+      id: cred.id,
+      rawId: b64.enc(cred.rawId),
+      type: cred.type,
+      response: {
+        attestationObject: b64.enc(cred.response.attestationObject),
+        clientDataJSON: b64.enc(cred.response.clientDataJSON),
+        transports: cred.response.getTransports?.() || [],
+      },
+      clientExtensionResults: cred.getClientExtensionResults(),
+    });
+    const { redirect } = await postJSON(`/settings/passkeys/finish?name=${encodeURIComponent(name)}`, body);
+    location.assign(redirect);
+  };
+
+  const loginWithPasskey = async (next) => {
+    const { publicKey } = await postJSON("/login/passkey/begin");
+    publicKey.challenge = b64.dec(publicKey.challenge);
+    for (const c of publicKey.allowCredentials || []) c.id = b64.dec(c.id);
+    const cred = await navigator.credentials.get({ publicKey });
+    const r = cred.response;
+    const body = JSON.stringify({
+      id: cred.id,
+      rawId: b64.enc(cred.rawId),
+      type: cred.type,
+      response: {
+        authenticatorData: b64.enc(r.authenticatorData),
+        clientDataJSON: b64.enc(r.clientDataJSON),
+        signature: b64.enc(r.signature),
+        userHandle: r.userHandle ? b64.enc(r.userHandle) : null,
+      },
+      clientExtensionResults: cred.getClientExtensionResults(),
+    });
+    const { redirect } = await postJSON(`/login/passkey/finish?next=${encodeURIComponent(next || "/")}`, body);
+    location.assign(redirect);
+  };
+
   const flash = (el, text) => {
     const old = el.textContent;
     el.textContent = text;
@@ -88,6 +152,16 @@
         localStorage.setItem(KEY, set.dataset.themeSet);
       } catch {}
       apply();
+      return;
+    }
+    const add = e.target.closest("[data-passkey-add]");
+    if (add) {
+      addPasskey().catch((err) => showError(err.message));
+      return;
+    }
+    const login = e.target.closest("[data-passkey-login]");
+    if (login) {
+      loginWithPasskey(login.dataset.passkeyLogin).catch((err) => showError(err.message));
       return;
     }
     const tools = e.target.closest("[data-tools]");

@@ -86,6 +86,13 @@ push target, codes appear only in the portal. Keys created with the CLI have
 no owner; their codes and Approve/Deny URLs are logged. A failed publish is
 logged at WARN.
 
+Under **Settings** (`/settings`) users change their password (all their other
+browser sessions are logged out), manage **passkeys** (add, see last use,
+delete) and set their push target. The login page offers "Sign in with a
+passkey" (discoverable credentials, no username needed). The passkey relying
+party is derived from `base_url`: its host is the RP ID, so `base_url` must use
+a host name and must not change once passkeys exist.
+
 Open requests are always listed at the top of the portal with their code and
 Approve/Deny buttons; the page reloads itself when requests appear or resolve.
 Approving in the portal is equivalent to the Approve button in the push.

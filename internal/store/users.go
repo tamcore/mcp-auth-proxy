@@ -10,6 +10,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const userColumns = `id, username, password_hash, admin, disabled, created_at, sessions_since`
+
 // User is one login of the multi-user instance. PasswordHash is empty until the
 // user sets a password via invite link. Admin is toggled only in the config.
 type User struct {
@@ -19,6 +21,8 @@ type User struct {
 	Admin        bool
 	Disabled     bool
 	CreatedAt    time.Time
+	// SessionsSince rejects web sessions issued before it (password change).
+	SessionsSince *time.Time
 }
 
 // HashPassword bcrypt-hashes a plaintext password.
@@ -83,7 +87,8 @@ func scanUser(sc scanner) (*User, error) {
 	var u User
 	var created string
 	var admin, disabled int
-	if err := sc.Scan(&u.ID, &u.Username, &u.PasswordHash, &admin, &disabled, &created); err != nil {
+	var since any
+	if err := sc.Scan(&u.ID, &u.Username, &u.PasswordHash, &admin, &disabled, &created, &since); err != nil {
 		if isNoRows(err) {
 			return nil, ErrNotFound
 		}
@@ -95,25 +100,37 @@ func scanUser(sc scanner) (*User, error) {
 	}
 	u.Admin = admin == 1
 	u.Disabled = disabled == 1
+	if u.SessionsSince, perr = optionalTime(since); perr != nil {
+		return nil, perr
+	}
 	return &u, nil
+}
+
+// SetSessionsSince logs out every web session of the user issued before t.
+func (s *Store) SetSessionsSince(ctx context.Context, userID string, t time.Time) error {
+	q := `UPDATE users SET sessions_since = ? WHERE id = ?`
+	if _, err := s.db.ExecContext(ctx, q, FormatTime(t), userID); err != nil {
+		return fmt.Errorf("store: set sessions_since: %w", err)
+	}
+	return nil
 }
 
 // UserByName resolves a user by username.
 func (s *Store) UserByName(ctx context.Context, name string) (*User, error) {
 	return scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, admin, disabled, created_at FROM users WHERE username = ?`, name))
+		`SELECT `+userColumns+` FROM users WHERE username = ?`, name))
 }
 
 // UserByID resolves a user by id.
 func (s *Store) UserByID(ctx context.Context, id string) (*User, error) {
 	return scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, admin, disabled, created_at FROM users WHERE id = ?`, id))
+		`SELECT `+userColumns+` FROM users WHERE id = ?`, id))
 }
 
 // ListUsers returns all users.
 func (s *Store) ListUsers(ctx context.Context) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, username, password_hash, admin, disabled, created_at FROM users ORDER BY username`)
+		`SELECT `+userColumns+` FROM users ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}

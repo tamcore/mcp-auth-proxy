@@ -7,6 +7,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	golang.org/x/crypto v0.45.0
 	modernc.org/sqlite v1.62.0
 )
 

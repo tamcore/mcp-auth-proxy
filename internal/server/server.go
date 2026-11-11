@@ -82,8 +82,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
 	mux.HandleFunc("POST /oauth/consent", s.as.HandleConsent)
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
-	mux.HandleFunc("/approve/{id}", s.handleApprove)
-	mux.HandleFunc("/deny/{id}", s.handleDeny)
+	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
+	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
 	return mux
 }
 
@@ -195,6 +195,21 @@ func signResult(approve bool, err error) (int, ui.ResultData) {
 	default:
 		return http.StatusNotFound, ui.ResultData{Tone: ui.ToneError, Heading: "Not found",
 			Message: "This request is unknown or has expired."}
+	}
+}
+
+// allowCrossOrigin lets the ntfy web app POST the Approve/Deny actions. The
+// links carry no cookies; the HMAC signature is the authorization.
+func allowCrossOrigin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next(w, r)
 	}
 }
 

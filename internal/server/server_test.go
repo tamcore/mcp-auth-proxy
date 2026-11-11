@@ -156,3 +156,29 @@ func TestLoginPageServed(t *testing.T) {
 		t.Fatalf("login page: %d", resp.StatusCode)
 	}
 }
+
+func TestApproveDenyAllowCrossOriginFromNtfyWebApp(t *testing.T) {
+	ts := newTestServer(t)
+	for _, path := range []string{"/approve/x", "/deny/x"} {
+		req, _ := http.NewRequest(http.MethodOptions, ts.URL+path, nil)
+		req.Header.Set("Origin", "https://ntfy.example")
+		req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent || resp.Header.Get("Access-Control-Allow-Origin") != "*" ||
+			!strings.Contains(resp.Header.Get("Access-Control-Allow-Methods"), http.MethodPost) {
+			t.Fatalf("%s preflight: %d %v", path, resp.StatusCode, resp.Header)
+		}
+		resp, err = http.Post(ts.URL+path+"?sig=bad", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden || resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatalf("%s: bad sig must stay 403 and carry CORS: %d", path, resp.StatusCode)
+		}
+	}
+}

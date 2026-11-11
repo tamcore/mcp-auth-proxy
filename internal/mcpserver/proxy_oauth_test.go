@@ -107,7 +107,26 @@ func TestOAuthUpstreamUsesKeyOwnersToken(t *testing.T) {
 	if !strings.Contains(got, "at-u_a") || !strings.Contains(got, "at-u_b") {
 		t.Fatalf("each user must use their own token, saw %s", got)
 	}
-	if _, err := p.ServerFor(ctx, key("u_c")); err == nil || !strings.Contains(err.Error(), "not linked") {
-		t.Fatalf("unlinked user must get a clear error, got %v", err)
+	assertUnlinkedKeepsAuth(t, p, key("u_c"))
+}
+
+// assertUnlinkedKeepsAuth checks that an unlinked upstream drops only its own
+// tools: the key still gets the auth tool.
+func assertUnlinkedKeepsAuth(t *testing.T, p *Proxy, k *store.Key) {
+	t.Helper()
+	srv, err := p.ServerFor(context.Background(), k)
+	if err != nil {
+		t.Fatalf("unlinked upstream must not fail the whole key: %v", err)
+	}
+	res, err := connectClient(t, srv).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(res.Tools))
+	for _, tool := range res.Tools {
+		names = append(names, tool.Name)
+	}
+	if len(names) != 1 || names[0] != AuthToolName {
+		t.Fatalf("want only the auth tool, got %v", names)
 	}
 }

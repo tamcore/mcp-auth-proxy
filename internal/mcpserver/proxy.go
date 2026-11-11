@@ -57,6 +57,9 @@ type Options struct {
 
 // New builds the proxy.
 func New(o Options) *Proxy {
+	if o.Logger == nil {
+		o.Logger = slog.Default()
+	}
 	return &Proxy{
 		pool: o.Pool, store: o.Store, gate: o.Gate, metrics: o.Metrics, logger: o.Logger,
 		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses,
@@ -72,25 +75,28 @@ func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, err
 	if ok {
 		return srv, nil
 	}
-	srv, err := p.build(ctx, key)
-	if err != nil {
-		return nil, err
+	srv, complete := p.build(ctx, key)
+	if complete {
+		p.mu.Lock()
+		p.servers[key.ID] = srv
+		p.mu.Unlock()
 	}
-	p.mu.Lock()
-	p.servers[key.ID] = srv
-	p.mu.Unlock()
 	return srv, nil
 }
 
-func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, error) {
+// build assembles the key's server. A failing upstream only drops its own
+// tools; the result is then incomplete and not cached, so it is retried.
+func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, bool) {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
 	p.addAuthTool(srv, key)
+	complete := true
 	for _, name := range key.Upstreams {
 		if err := p.addUpstreamTools(ctx, srv, key, name); err != nil {
-			return nil, err
+			p.logger.Warn("upstream unavailable for key", "key", key.ID, "upstream", name, "error", err)
+			complete = false
 		}
 	}
-	return srv, nil
+	return srv, complete
 }
 
 func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *store.Key, name string) error {

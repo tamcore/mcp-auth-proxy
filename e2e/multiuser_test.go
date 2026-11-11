@@ -63,6 +63,11 @@ upstreams:
   - name: private
     command: [%q, dev-echo]
     users: [alice]
+oauth:
+  clients:
+    - client_id: e2e
+      name: E2E Client
+      redirect_uris: [http://127.0.0.1:1/cb]
 `, base, port, filepath.Join(dir, "state"), ntfy.srv.URL, binary, binary)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -200,14 +205,14 @@ func toolsAndAudit(t *testing.T, e *env, cookie *http.Cookie, token string) {
 	if !names["echo__echo"] || !names["private__echo"] || !names["auth"] {
 		t.Fatalf("tools: %v", names)
 	}
-	if blocked := callTool(t, sess, "echo__echo", map[string]any{"text": "audit-me"}); !blocked.IsError {
+	if blocked := callTool(t, sess, "echo__echo", map[string]any{textArg: "audit-me"}); !blocked.IsError {
 		t.Fatal("call must be blocked first")
 	}
 	e.ntfy.waitFor(t, 1)
 	if res := callTool(t, sess, "auth", map[string]any{"otp": lastCode(t, e.ntfy)}); res.IsError {
 		t.Fatalf("auth: %q", textOf(res))
 	}
-	if res := callTool(t, sess, "echo__echo", map[string]any{"text": "audit-me"}); res.IsError {
+	if res := callTool(t, sess, "echo__echo", map[string]any{textArg: "audit-me"}); res.IsError {
 		t.Fatalf("retry: %q", textOf(res))
 	}
 	req, _ := http.NewRequest(http.MethodGet, e.base+"/portal/audit", nil)

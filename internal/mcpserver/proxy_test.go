@@ -87,7 +87,7 @@ func newTestProxy(t *testing.T, upstreamURL string) (*Proxy, *fakeNotifier, *sto
 	})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pool := upstream.NewPool([]config.UpstreamConfig{{Name: "echo", URL: upstreamURL}}, st, nil, logger)
-	proxy := New(pool, g, metrics.New(nil), logger)
+	proxy := New(Options{Pool: pool, Store: st, Gate: g, Metrics: metrics.New(nil), Logger: logger, AuditEnabled: true})
 	return proxy, ntf, key
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 )
@@ -23,13 +24,15 @@ func newKeyCmd() *cobra.Command {
 			label, _ := cmd.Flags().GetString("label")
 			ups, _ := cmd.Flags().GetString("upstreams")
 			ttl, _ := cmd.Flags().GetDuration("ttl")
+			user, _ := cmd.Flags().GetString("user")
 			asJSON, _ := cmd.Flags().GetBool("json")
-			return runKeyCreate(cmd, label, ups, ttl, asJSON)
+			return runKeyCreate(cmd, label, ups, ttl, user, asJSON)
 		},
 	}
 	create.Flags().String("label", "", "human-readable label (required)")
 	create.Flags().String("upstreams", "", "comma-separated upstream names (default: all)")
 	create.Flags().Duration("ttl", 0, "session TTL override (default: config session_ttl)")
+	create.Flags().String("user", "", "username to bind the key to (from config users)")
 	create.Flags().Bool("json", false, "machine-readable output")
 	_ = create.MarkFlagRequired("label")
 	c.AddCommand(create, &cobra.Command{
@@ -49,7 +52,7 @@ func newKeyCmd() *cobra.Command {
 	return c
 }
 
-func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, asJSON bool) error {
+func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, user string, asJSON bool) error {
 	cfg, err := loadConfig(cmd)
 	if err != nil {
 		return err
@@ -83,6 +86,18 @@ func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, asJS
 		TTLSeconds: int64(ttl / time.Second),
 		CreatedAt:  time.Now().UTC(),
 	}
+	if user != "" {
+		u, err := st.UserByName(cmd.Context(), user)
+		if err != nil {
+			return fmt.Errorf("user %q: %w", user, err)
+		}
+		key.UserID = &u.ID
+		for _, n := range names {
+			if !upstreamAllowed(cfg, u.Username, n) {
+				return fmt.Errorf("upstream %q is not available to user %q", n, user)
+			}
+		}
+	}
 	if err := st.CreateKey(cmd.Context(), key); err != nil {
 		return err
 	}
@@ -108,6 +123,15 @@ func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, asJS
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Upstreams:         %s\n", strings.Join(names, ","))
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Session TTL:       %s\n", ttl)
 	return nil
+}
+
+func upstreamAllowed(cfg *config.Config, username, name string) bool {
+	for _, u := range cfg.Upstreams {
+		if u.Name == name {
+			return u.Allows(username)
+		}
+	}
+	return false
 }
 
 func runKeyList(cmd *cobra.Command) error {

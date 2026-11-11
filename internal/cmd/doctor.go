@@ -38,6 +38,7 @@ func runDoctor(cmd *cobra.Command) error {
 	check("state dir", store.CheckSignSecretPerms(cfg.StateDir))
 	check("ntfy", ntfySanity(cfg))
 	check("upstreams", upstreamSanity(cfg))
+	check("users", usersSanity(cfg))
 	if failed {
 		return fmt.Errorf("doctor: one or more checks failed")
 	}
@@ -54,6 +55,13 @@ func ntfySanity(cfg *config.Config) error {
 	}
 	if cfg.Ntfy.Topic == "" {
 		return fmt.Errorf("ntfy.topic is required when ntfy is enabled")
+	}
+	return nil
+}
+
+func usersSanity(cfg *config.Config) error {
+	if len(cfg.Users) == 0 {
+		return fmt.Errorf("no users configured; add `users: [alice, ...]` or the web UI has no logins")
 	}
 	return nil
 }

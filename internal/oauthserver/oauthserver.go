@@ -45,6 +45,10 @@ type Server struct {
 
 	mu    sync.Mutex
 	codes map[string]*authCode
+
+	// CurrentUser resolves the logged-in web user for consent; set by the
+	// server package. Nil means single-user mode (no user binding).
+	CurrentUser func(*http.Request) *store.User
 }
 
 // New builds the AS. Clients are seeded into the store from config.
@@ -146,7 +150,7 @@ func (s *Server) HandleConsent(w http.ResponseWriter, r *http.Request) {
 	if label == "" {
 		label = "oauth client " + p.clientID
 	}
-	key, err := s.createKey(r.Context(), label)
+	key, err := s.createKey(r.Context(), label, r)
 	if err != nil {
 		s.logger.Error("consent: create key", "error", err)
 		s.writeError(w, http.StatusInternalServerError, "server_error", "could not create identity")
@@ -164,7 +168,7 @@ func (s *Server) HandleConsent(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, loc, http.StatusFound)
 }
 
-func (s *Server) createKey(ctx context.Context, label string) (*store.Key, error) {
+func (s *Server) createKey(ctx context.Context, label string, r *http.Request) (*store.Key, error) {
 	raw := make([]byte, 32)
 	if _, err := io.ReadFull(s.rand, raw); err != nil {
 		return nil, err
@@ -178,10 +182,27 @@ func (s *Server) createKey(ctx context.Context, label string) (*store.Key, error
 		TTLSeconds: int64(s.cfg.SessionTTL / time.Second),
 		CreatedAt:  s.now(),
 	}
+	if s.CurrentUser != nil {
+		if u := s.CurrentUser(r); u != nil {
+			key.UserID = &u.ID
+			key.Upstreams = allowedUpstreamNames(s.cfg, u.Username)
+		}
+	}
 	if err := s.store.CreateKey(ctx, key); err != nil {
 		return nil, err
 	}
 	return key, nil
+}
+
+// allowedUpstreamNames returns the global upstreams a user may use.
+func allowedUpstreamNames(cfg *config.Config, username string) []string {
+	var out []string
+	for _, u := range cfg.Upstreams {
+		if u.Allows(username) {
+			out = append(out, u.Name)
+		}
+	}
+	return out
 }
 
 func (s *Server) mintCode(p *authorizeParams, keyID string) (string, error) {

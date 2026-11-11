@@ -5,11 +5,14 @@ package mcpserver
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -28,17 +31,37 @@ const AuthToolName = "auth"
 // Proxy builds and caches one MCP server per key.
 type Proxy struct {
 	pool    *upstream.Pool
+	store   *store.Store
 	gate    *gate.Gate
 	metrics *metrics.Metrics
 	logger  *slog.Logger
 
+	auditEnabled bool
+	logResponses bool
+
 	mu      sync.Mutex
 	servers map[string]*mcp.Server
+	userUps map[string]map[string]*upstream.Upstream
+}
+
+// Options configures the proxy.
+type Options struct {
+	Pool         *upstream.Pool
+	Store        *store.Store
+	Gate         *gate.Gate
+	Metrics      *metrics.Metrics
+	Logger       *slog.Logger
+	AuditEnabled bool
+	LogResponses bool
 }
 
 // New builds the proxy.
-func New(pool *upstream.Pool, g *gate.Gate, m *metrics.Metrics, logger *slog.Logger) *Proxy {
-	return &Proxy{pool: pool, gate: g, metrics: m, logger: logger, servers: map[string]*mcp.Server{}}
+func New(o Options) *Proxy {
+	return &Proxy{
+		pool: o.Pool, store: o.Store, gate: o.Gate, metrics: o.Metrics, logger: o.Logger,
+		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses,
+		servers: map[string]*mcp.Server{}, userUps: map[string]map[string]*upstream.Upstream{},
+	}
 }
 
 // ServerFor returns the cached per-key MCP server, building it on first use.
@@ -71,7 +94,7 @@ func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, error) 
 }
 
 func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *store.Key, name string) error {
-	u, err := p.pool.Get(name)
+	u, err := p.resolveUpstream(ctx, key, name)
 	if err != nil {
 		return err
 	}
@@ -92,6 +115,63 @@ func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *stor
 	return nil
 }
 
+// resolveUpstream finds a named upstream for a key: the key owner's own
+// database upstreams win over same-named global ones.
+func (p *Proxy) resolveUpstream(ctx context.Context, key *store.Key, name string) (*upstream.Upstream, error) {
+	if key.UserID != nil {
+		p.mu.Lock()
+		cache, ok := p.userUps[*key.UserID]
+		p.mu.Unlock()
+		if !ok {
+			ups, err := p.store.ListUserUpstreams(ctx, *key.UserID)
+			if err != nil {
+				return nil, err
+			}
+			cache = map[string]*upstream.Upstream{}
+			for _, row := range ups {
+				cache[row.Name] = upstream.NewFromConfig(row.Config(), p.store, nil, p.logger)
+			}
+			p.mu.Lock()
+			p.userUps[*key.UserID] = cache
+			p.mu.Unlock()
+		}
+		if u, ok := cache[name]; ok {
+			return u, nil
+		}
+	}
+	return p.pool.Get(name)
+}
+
+// audit records one proxied call for the portal audit log.
+func (p *Proxy) audit(ctx context.Context, key *store.Key,
+	toolName string, args json.RawMessage, res *mcp.CallToolResult) {
+	if !p.auditEnabled || key.UserID == nil {
+		return
+	}
+	id := make([]byte, 8)
+	if _, err := rand.Read(id); err != nil {
+		return
+	}
+	e := &store.AuditEntry{
+		ID:        "a_" + hex.EncodeToString(id),
+		UserID:    *key.UserID,
+		KeyID:     key.ID,
+		KeyLabel:  key.Label,
+		ToolName:  toolName,
+		Arguments: string(args),
+		CreatedAt: time.Now().UTC(),
+	}
+	if p.logResponses && res != nil {
+		if b, err := json.Marshal(res.Content); err == nil {
+			s := string(b)
+			e.Response = &s
+		}
+	}
+	if err := p.store.AppendAudit(ctx, e); err != nil {
+		p.logger.Error("append audit", "error", err)
+	}
+}
+
 func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 	upstreamName, toolName string, args json.RawMessage) (*mcp.CallToolResult, error) {
 	fullName := upstreamName + NamespaceSep + toolName
@@ -105,10 +185,11 @@ func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 		p.metrics.ToolBlocked()
 		return errorResult(msg), nil
 	}
-	u, err := p.pool.Get(upstreamName)
+	u, err := p.resolveUpstream(ctx, key, upstreamName)
 	if err != nil {
 		p.metrics.ToolUpstreamError()
-		return errorResult(fmt.Sprintf("Tool %q failed: upstream %q is not configured.", fullName, upstreamName)), nil
+		msg := fmt.Sprintf("Tool %q failed: upstream %q is not configured.", fullName, upstreamName)
+		return errorResult(msg), nil
 	}
 	res, err := u.Call(ctx, toolName, args)
 	if err != nil {
@@ -118,6 +199,7 @@ func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 		return errorResult(fmt.Sprintf("Tool %q failed on upstream %q.", fullName, upstreamName)), nil
 	}
 	p.metrics.ToolAllowed()
+	p.audit(ctx, key, fullName, args, res)
 	return res, nil
 }
 

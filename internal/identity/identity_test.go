@@ -76,3 +76,26 @@ func TestResolveFailures(t *testing.T) {
 		t.Fatalf("revoked key: want ErrUnauthorized, got %v", err)
 	}
 }
+
+func TestDisabledUserKeyRefused(t *testing.T) {
+	r, st := setup(t)
+	ctx := context.Background()
+	u := &store.User{ID: "u_1", Username: "alice", PasswordHash: "x", CreatedAt: time.Now().UTC()}
+	if err := st.CreateUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	k := &store.Key{ID: "k_u", Kind: store.KeyKindStatic, Label: "l", SecretHash: store.HashSecret("mak_user"),
+		Upstreams: []string{"e"}, TTLSeconds: 60, CreatedAt: time.Now().UTC(), UserID: &u.ID}
+	if err := st.CreateKey(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Resolve(ctx, "mak_user"); err != nil {
+		t.Fatalf("active user's key must resolve: %v", err)
+	}
+	if err := st.SetUserDisabled(ctx, u.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Resolve(ctx, "mak_user"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("disabled user's key: want ErrUnauthorized, got %v", err)
+	}
+}

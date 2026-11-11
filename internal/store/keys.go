@@ -24,6 +24,7 @@ type Key struct {
 	TTLSeconds int64
 	CreatedAt  time.Time
 	RevokedAt  *time.Time
+	UserID     *string
 }
 
 // Revoked reports whether the key has been revoked.
@@ -35,14 +36,17 @@ func (s *Store) CreateKey(ctx context.Context, k *Key) error {
 	if err != nil {
 		return fmt.Errorf("store: marshal upstreams: %w", err)
 	}
-	var revoked any
+	var revoked, userID any
 	if k.RevokedAt != nil {
 		revoked = FormatTime(*k.RevokedAt)
 	}
+	if k.UserID != nil {
+		userID = *k.UserID
+	}
 	_, err = s.db.ExecContext(ctx, `
-INSERT INTO keys (id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		k.ID, k.Kind, k.Label, k.SecretHash, string(ups), k.TTLSeconds, FormatTime(k.CreatedAt), revoked)
+INSERT INTO keys (id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at, user_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		k.ID, k.Kind, k.Label, k.SecretHash, string(ups), k.TTLSeconds, FormatTime(k.CreatedAt), revoked, userID)
 	if err != nil {
 		return fmt.Errorf("store: create key: %w", err)
 	}
@@ -62,10 +66,10 @@ func (s *Store) KeyByID(ctx context.Context, id string) (*Key, error) {
 func (s *Store) keyWhere(ctx context.Context, where string, arg string) (*Key, error) {
 	var k Key
 	var ups, created string
-	var revoked any
-	err := scanOne(ctx, s, `SELECT id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at
+	var revoked, userID any
+	err := scanOne(ctx, s, `SELECT id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at, user_id
 FROM keys WHERE `+where, []any{arg},
-		&k.ID, &k.Kind, &k.Label, &k.SecretHash, &ups, &k.TTLSeconds, &created, &revoked)
+		&k.ID, &k.Kind, &k.Label, &k.SecretHash, &ups, &k.TTLSeconds, &created, &revoked, &userID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +87,16 @@ FROM keys WHERE `+where, []any{arg},
 		}
 		k.RevokedAt = &t
 	}
+	if us, ok := userID.(string); ok && us != "" {
+		k.UserID = &us
+	}
 	return &k, nil
 }
 
 // ListKeys returns all keys, revoked included, newest first.
 func (s *Store) ListKeys(ctx context.Context) ([]*Key, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, label, secret_hash, upstreams,
-    ttl_seconds, created_at, revoked_at FROM keys ORDER BY created_at DESC`)
+    ttl_seconds, created_at, revoked_at, user_id FROM keys ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("store: list keys: %w", err)
 	}
@@ -126,8 +133,9 @@ func (s *Store) RevokeKey(ctx context.Context, id string, at time.Time) error {
 func scanKeyRow(sc scanner) (*Key, error) {
 	var k Key
 	var ups, created string
-	var revoked any
-	if err := sc.Scan(&k.ID, &k.Kind, &k.Label, &k.SecretHash, &ups, &k.TTLSeconds, &created, &revoked); err != nil {
+	var revoked, userID any
+	cols := []any{&k.ID, &k.Kind, &k.Label, &k.SecretHash, &ups, &k.TTLSeconds, &created, &revoked, &userID}
+	if err := sc.Scan(cols...); err != nil {
 		if isNoRows(err) {
 			return nil, ErrNotFound
 		}
@@ -140,12 +148,15 @@ func scanKeyRow(sc scanner) (*Key, error) {
 	if k.CreatedAt, err = ParseTime(created); err != nil {
 		return nil, fmt.Errorf("store: decode created_at: %w", err)
 	}
-	if s, ok := revoked.(string); ok && s != "" {
-		t, perr := ParseTime(s)
+	if rs, ok := revoked.(string); ok && rs != "" {
+		t, perr := ParseTime(rs)
 		if perr != nil {
 			return nil, fmt.Errorf("store: decode revoked_at: %w", perr)
 		}
 		k.RevokedAt = &t
+	}
+	if us, ok := userID.(string); ok && us != "" {
+		k.UserID = &us
 	}
 	return &k, nil
 }

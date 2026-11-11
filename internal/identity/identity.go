@@ -53,7 +53,7 @@ func (r *Resolver) resolveStatic(ctx context.Context, token string) (*store.Key,
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
-	return r.checkLive(key)
+	return r.checkLive(ctx, key)
 }
 
 func (r *Resolver) resolveOAuth(ctx context.Context, token string) (*store.Key, error) {
@@ -65,12 +65,18 @@ func (r *Resolver) resolveOAuth(ctx context.Context, token string) (*store.Key, 
 	if err != nil {
 		return nil, ErrUnauthorized
 	}
-	return r.checkLive(key)
+	return r.checkLive(ctx, key)
 }
 
-func (r *Resolver) checkLive(key *store.Key) (*store.Key, error) {
+func (r *Resolver) checkLive(ctx context.Context, key *store.Key) (*store.Key, error) {
 	if key.Revoked() {
 		return nil, ErrUnauthorized
+	}
+	if key.UserID != nil {
+		u, err := r.store.UserByID(ctx, *key.UserID)
+		if err != nil || u.Disabled {
+			return nil, ErrUnauthorized
+		}
 	}
 	return key, nil
 }

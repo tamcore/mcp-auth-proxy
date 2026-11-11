@@ -19,6 +19,8 @@ const (
 	DefaultStateDir   = "./data"
 	DefaultSessionTTL = 8 * time.Hour
 	DefaultNtfyURL    = "https://ntfy.sh"
+	// DefaultAuditRetention is the default audit-log TTL (30 days).
+	DefaultAuditRetention = 30 * 24 * time.Hour
 )
 
 // OTP defaults.
@@ -39,6 +41,9 @@ type Config struct {
 	SessionTTL time.Duration
 	OTP        OTPConfig
 	Ntfy       NtfyConfig
+	Audit      AuditConfig
+	Users      []string
+	Admins     []string
 	Upstreams  []UpstreamConfig
 	OAuth      OAuthConfig
 }
@@ -58,13 +63,39 @@ type NtfyConfig struct {
 	Enabled bool
 }
 
-// UpstreamConfig is one upstream MCP server.
+// AuditConfig holds the audit log settings. Retention is the garbage-collection
+// TTL for log entries; the default is 30 days.
+type AuditConfig struct {
+	Enabled      bool
+	LogResponses bool
+	Retention    time.Duration
+}
+
+// UpstreamConfig is one upstream MCP server. Users lists the usernames allowed
+// to use it; empty means global (every user).
 type UpstreamConfig struct {
 	Name    string               `mapstructure:"name"`
 	URL     string               `mapstructure:"url"`
 	Command []string             `mapstructure:"command"`
 	Headers map[string]string    `mapstructure:"headers"`
 	OAuth   *UpstreamOAuthConfig `mapstructure:"oauth"`
+	Users   []string             `mapstructure:"users"`
+}
+
+// Global reports whether the upstream is available to every user.
+func (u *UpstreamConfig) Global() bool { return len(u.Users) == 0 }
+
+// Allows reports whether the named user may use this upstream.
+func (u *UpstreamConfig) Allows(username string) bool {
+	if u.Global() {
+		return true
+	}
+	for _, name := range u.Users {
+		if name == username {
+			return true
+		}
+	}
+	return false
 }
 
 // UpstreamOAuthConfig is the OAuth client registration for an upstream that
@@ -126,6 +157,13 @@ func Load(path string) (*Config, error) {
 			Topic:   v.GetString("ntfy.topic"),
 			Enabled: v.GetBool("ntfy.enabled"),
 		},
+		Audit: AuditConfig{
+			Enabled:      v.GetBool("audit.enabled"),
+			LogResponses: v.GetBool("audit.log_responses"),
+			Retention:    v.GetDuration("audit.retention"),
+		},
+		Users:  v.GetStringSlice("users"),
+		Admins: v.GetStringSlice("admins"),
 		OAuth: OAuthConfig{
 			TokenTTL:         v.GetDuration("oauth.token_ttl"),
 			AuthorizeCodeTTL: v.GetDuration("oauth.authorize_code_ttl"),
@@ -154,6 +192,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otp.renotify_floor", DefaultOTPRenotifyFloor)
 	v.SetDefault("ntfy.url", DefaultNtfyURL)
 	v.SetDefault("ntfy.enabled", false)
+	v.SetDefault("audit.enabled", true)
+	v.SetDefault("audit.log_responses", false)
+	v.SetDefault("audit.retention", DefaultAuditRetention)
 	v.SetDefault("oauth.token_ttl", DefaultOAuthTokenTTL)
 	v.SetDefault("oauth.authorize_code_ttl", DefaultAuthorizeCodeTTL)
 }
@@ -186,9 +227,14 @@ func (c *Config) Validate() error {
 	if c.Ntfy.Enabled && strings.TrimSpace(c.Ntfy.Topic) == "" {
 		errs = append(errs, errors.New("config: ntfy.topic is required when ntfy.enabled is true"))
 	}
+	userSet, userErrs := validateUsers(c.Users, c.Admins)
+	errs = append(errs, userErrs...)
 	seen := map[string]bool{}
 	for i := range c.Upstreams {
-		errs = append(errs, c.Upstreams[i].validate(i, seen))
+		errs = append(errs, c.Upstreams[i].validate(i, seen, userSet))
+	}
+	if c.Audit.Retention <= 0 {
+		errs = append(errs, errors.New("config: audit.retention must be positive"))
 	}
 	for i := range c.OAuth.Clients {
 		errs = append(errs, c.OAuth.Clients[i].validate(i))
@@ -200,6 +246,30 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("config: oauth.authorize_code_ttl must be positive"))
 	}
 	return errors.Join(errs...)
+}
+
+// validateUsers checks the users/admins lists and returns the user set.
+func validateUsers(users, admins []string) (map[string]bool, []error) {
+	userSet := map[string]bool{}
+	var errs []error
+	for i, u := range users {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			errs = append(errs, fmt.Errorf("config: users[%d] must not be empty", i))
+			continue
+		}
+		if userSet[u] {
+			errs = append(errs, fmt.Errorf("config: duplicate user %q", u))
+		}
+		userSet[u] = true
+	}
+	for i, a := range admins {
+		a = strings.TrimSpace(a)
+		if !userSet[a] {
+			errs = append(errs, fmt.Errorf("config: admins[%d] %q is not in users", i, a))
+		}
+	}
+	return userSet, errs
 }
 
 func (o *OTPConfig) validate() error {
@@ -219,7 +289,7 @@ func (o *OTPConfig) validate() error {
 	return errors.Join(errs...)
 }
 
-func (u *UpstreamConfig) validate(i int, seen map[string]bool) error {
+func (u *UpstreamConfig) validate(i int, seen map[string]bool, users map[string]bool) error {
 	p := fmt.Sprintf("config: upstreams[%d]", i)
 	var errs []error
 	if strings.TrimSpace(u.Name) == "" {
@@ -231,6 +301,11 @@ func (u *UpstreamConfig) validate(i int, seen map[string]bool) error {
 	}
 	if (u.URL == "") == (len(u.Command) == 0) {
 		errs = append(errs, fmt.Errorf("%s (%s): exactly one of url or command is required", p, u.Name))
+	}
+	for _, name := range u.Users {
+		if !users[name] {
+			errs = append(errs, fmt.Errorf("%s (%s): users references unknown user %q", p, u.Name, name))
+		}
 	}
 	if u.OAuth != nil {
 		if u.OAuth.AuthorizeURL == "" || u.OAuth.TokenURL == "" || u.OAuth.ClientID == "" {

@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	testLabel    = "laptop"
 	testKeyID    = "k_1"
 	testUpstream = "echo"
 )
@@ -37,7 +38,7 @@ func openTest(t *testing.T) *Store {
 func TestKeyLifecycle(t *testing.T) {
 	ctx := context.Background()
 	st := openTest(t)
-	k := &Key{ID: testKeyID, Kind: KeyKindStatic, Label: "laptop",
+	k := &Key{ID: testKeyID, Kind: KeyKindStatic, Label: testLabel,
 		SecretHash: HashSecret("mak_secret"), Upstreams: []string{testUpstream},
 		TTLSeconds: 3600, CreatedAt: nowUTC()}
 	if err := st.CreateKey(ctx, k); err != nil {

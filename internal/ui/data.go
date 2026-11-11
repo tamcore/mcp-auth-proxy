@@ -80,6 +80,7 @@ type SettingsData struct {
 	Error           string
 	Flash           string
 	NotifyURL       string
+	NotifyTopic     string
 	PasskeysEnabled bool
 	Passkeys        []PasskeyView
 }

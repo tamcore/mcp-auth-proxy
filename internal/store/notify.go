@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// UserNotify is a user's ntfy push target. Topic and Token are credentials:
-// never logged or rendered back.
+// UserNotify is a user's ntfy push target. Token is a credential: never
+// logged or rendered back.
 type UserNotify struct {
 	UserID    string
 	URL       string

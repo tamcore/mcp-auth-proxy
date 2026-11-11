@@ -38,7 +38,7 @@ func (ui *WebUI) renderSettings(w http.ResponseWriter, r *http.Request, user *st
 	n, err := ui.store.GetUserNotify(r.Context(), user.ID)
 	switch {
 	case err == nil:
-		d.NotifyURL = n.URL
+		d.NotifyURL, d.NotifyTopic = n.URL, n.Topic
 	case !errors.Is(err, store.ErrNotFound):
 		ui.logger.Error("load push target", "user", user.Username, "error", err)
 	}

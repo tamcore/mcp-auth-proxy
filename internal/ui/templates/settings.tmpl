@@ -61,7 +61,7 @@
 <section class="card" aria-labelledby="notify">
   <h2 id="notify" class="card-title">Push notifications</h2>
   {{if .NotifyURL}}
-  <p class="mb-4 text-sm">Codes for your keys go to <code class="mono">{{.NotifyURL}}</code>. Leave topic and token empty to keep them.</p>
+  <p class="mb-4 text-sm">Codes for your keys go to <code class="mono">{{.NotifyURL}}/{{.NotifyTopic}}</code>. Leave the token empty to keep it.</p>
   {{else}}
   <p class="alert-error mb-4">No push target set. Codes for your keys only appear on this page.</p>
   {{end}}
@@ -72,7 +72,7 @@
     </div>
     <div>
       <label class="field-label" for="ntfy-topic">Topic</label>
-      <input class="field" id="ntfy-topic" type="password" name="topic" autocomplete="off" {{if not .NotifyURL}}required{{end}} placeholder="{{if .NotifyURL}}unchanged{{else}}your-private-topic{{end}}">
+      <input class="field" id="ntfy-topic" type="text" name="topic" autocomplete="off" required value="{{.NotifyTopic}}" placeholder="your-private-topic">
     </div>
     <div>
       <label class="field-label" for="ntfy-token">Access token <span class="muted">(optional)</span></label>

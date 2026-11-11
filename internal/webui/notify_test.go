@@ -70,8 +70,9 @@ func TestNotifySettings(t *testing.T) {
 		t.Fatalf("saved target: %+v %v", n, err)
 	}
 	_, page := settingsBody(t, ts, bob)
-	if !strings.Contains(page, ntfy.URL) || strings.Contains(page, secretTopic) || strings.Contains(page, secretToken) {
-		t.Fatal("settings must show the server but never the topic or token")
+	if !strings.Contains(page, ntfy.URL) || !strings.Contains(page, `value="`+secretTopic+`"`) ||
+		strings.Contains(page, secretToken) {
+		t.Fatal("settings must show server and topic but never the token")
 	}
 	if strings.Contains(portalBody(t, ts, bob), "No push target") {
 		t.Fatal("portal hint must disappear once a target is set")

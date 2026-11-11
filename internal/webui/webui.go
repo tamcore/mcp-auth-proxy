@@ -15,6 +15,7 @@ type WebUI struct {
 	cfg      *config.Config
 	sessions *Sessions
 	pages    *view.Renderer
+	links    *pendingLinks
 	logger   *slog.Logger
 }
 
@@ -28,6 +29,7 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 		cfg:      cfg,
 		sessions: NewSessions(signSecret, nil),
 		pages:    pages,
+		links:    &pendingLinks{m: map[string]pendingLink{}},
 		logger:   logger,
 	}
 }
@@ -48,6 +50,8 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin", ui.handleAdmin)
 	mux.HandleFunc("POST /admin/disable", ui.handleAdminDisable)
 	mux.HandleFunc("POST /admin/invite", ui.handleAdminInvite)
+	mux.HandleFunc("POST /admin/upstream/link", ui.handleUpstreamLink)
+	mux.HandleFunc("GET /admin/upstream/callback", ui.handleUpstreamCallback)
 }
 
 // Sessions exposes the session verifier for the OAuth authorize gate.

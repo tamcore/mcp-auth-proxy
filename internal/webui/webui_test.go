@@ -26,7 +26,7 @@ const (
 	pwField    = "password"
 )
 
-func newTestUI(t *testing.T) (*store.Store, *httptest.Server) {
+func newTestUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server) {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -51,6 +51,9 @@ func newTestUI(t *testing.T) (*store.Store, *httptest.Server) {
 		},
 		Audit: config.AuditConfig{Enabled: true, Retention: 720 * time.Hour},
 		OAuth: config.OAuthConfig{TokenTTL: time.Hour, AuthorizeCodeTTL: 10 * time.Minute},
+	}
+	for _, f := range mutate {
+		f(cfg)
 	}
 	ui := New(st, cfg, secret, view.New(nil), nil)
 	mux := http.NewServeMux()

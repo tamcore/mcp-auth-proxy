@@ -48,10 +48,19 @@ type AuditData struct {
 	Entries   []*store.AuditEntry
 }
 
+// LinkUpstream is a configured upstream with OAuth and its link state.
+type LinkUpstream struct {
+	Name   string
+	URL    string
+	Linked bool
+}
+
 // AdminData feeds admin.tmpl. Invite is set once, right after minting.
 type AdminData struct {
-	Invite string
-	Users  []*store.User
+	Invite    string
+	Error     string
+	Users     []*store.User
+	Upstreams []LinkUpstream
 }
 
 // ConsentData feeds consent.tmpl.

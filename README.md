@@ -43,8 +43,11 @@ OAuth 2.x runs on both sides, but it only proves *who* is calling:
 
 - **Client → proxy**: each client uses a static `mak_…` key or an OAuth `map_…`
   access token. This is its *identity*.
-- **Proxy → upstream**: optionally an OAuth token per upstream, linked once with
-  `upstream link` and refreshed automatically.
+- **Proxy → upstream**: optionally an OAuth token per upstream, linked once by
+  an admin at `/admin` ("Link") and refreshed automatically. Register
+  `{base_url}/admin/upstream/callback` as redirect URI at the upstream's
+  authorization server. The CLI `upstream link` (loopback redirect) still works
+  where a browser and the database are on the same machine.
 
 Logging in via OAuth grants an identity — the right to list tools and ask for
 authorization. **Every tool call still requires the one-time code.** There is no

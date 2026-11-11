@@ -27,12 +27,7 @@ func (ui *WebUI) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	users, err := ui.store.ListUsers(r.Context())
-	if err != nil {
-		http.Error(w, "could not list users", http.StatusInternalServerError)
-		return
-	}
-	ui.pages.Render(w, http.StatusOK, "admin", page("Admin", admin, view.AdminData{Users: users}))
+	ui.renderAdmin(w, r, admin, http.StatusOK, "", "")
 }
 
 func (ui *WebUI) handleAdminDisable(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +61,26 @@ func (ui *WebUI) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not create invite", http.StatusInternalServerError)
 		return
 	}
-	users, _ := ui.store.ListUsers(r.Context())
 	link := strings.TrimRight(ui.cfg.BaseURL, "/") + "/invite/" + token
-	ui.pages.Render(w, http.StatusOK, "admin", page("Admin", admin, view.AdminData{Users: users, Invite: link}))
+	ui.renderAdmin(w, r, admin, http.StatusOK, link, "")
+}
+
+// renderAdmin shows users and OAuth upstreams. invite and errMsg are one-off
+// banners.
+func (ui *WebUI) renderAdmin(w http.ResponseWriter, r *http.Request, admin *store.User,
+	status int, invite, errMsg string) {
+	users, err := ui.store.ListUsers(r.Context())
+	if err != nil {
+		http.Error(w, "could not list users", http.StatusInternalServerError)
+		return
+	}
+	data := view.AdminData{Users: users, Invite: invite, Error: errMsg}
+	for _, u := range ui.cfg.Upstreams {
+		if u.OAuth == nil {
+			continue
+		}
+		_, terr := ui.store.GetUpstreamToken(r.Context(), u.Name)
+		data.Upstreams = append(data.Upstreams, view.LinkUpstream{Name: u.Name, URL: u.URL, Linked: terr == nil})
+	}
+	ui.pages.Render(w, status, "admin", page("Admin", admin, data))
 }

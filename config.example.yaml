@@ -53,7 +53,7 @@ upstreams:
   #   users: [alice]        # omit for global (all users)
   #   headers:
   #     X-Custom: value
-  #   oauth:               # optional: `upstream link remote` once, then tokens
+  #   oauth:               # optional: link once at /admin, then tokens
   #     authorize_url: https://idp.example.com/authorize   # are refreshed and
   #     token_url: https://idp.example.com/token           # persisted for you
   #     client_id: my-client-id

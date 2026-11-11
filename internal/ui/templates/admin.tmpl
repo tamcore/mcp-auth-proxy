@@ -1,5 +1,6 @@
 {{define "content"}}{{with .Data}}
 <h1 class="text-xl font-semibold text-slate-900 dark:text-white">Admin</h1>
+{{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
 {{with .Invite}}
 <section class="card border-teal-300 ring-4 ring-teal-500/10 dark:border-teal-400/40" aria-labelledby="newinvite" data-testid="new-invite">
   <h2 id="newinvite" class="card-title">Invite link, hand it over now</h2>
@@ -51,4 +52,23 @@
   </div>
   <p class="muted border-t border-slate-200 px-5 py-4 sm:px-6 dark:border-slate-700">Admins are toggled only in the config file (<code class="font-mono">admins</code> list). A disabled user cannot log in and their API keys stop working immediately.</p>
 </section>
+{{if .Upstreams}}
+<section class="card" aria-labelledby="upstream-oauth">
+  <h2 id="upstream-oauth" class="card-title">Upstream OAuth</h2>
+  <p class="muted mb-4">Link once; the proxy stores and refreshes the tokens for all users.</p>
+  <ul class="space-y-3">
+    {{range .Upstreams}}
+    <li class="flex flex-wrap items-center gap-2" data-testid="oauth-upstream">
+      <strong>{{.Name}}</strong>
+      {{if .Linked}}<span class="badge-accent">linked</span>{{else}}<span class="badge">not linked</span>{{end}}
+      <code class="muted min-w-0 flex-1 truncate font-mono text-xs">{{.URL}}</code>
+      <form method="post" action="/admin/upstream/link">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button class="{{if .Linked}}btn-ghost{{else}}btn{{end}}">{{if .Linked}}Re-link{{else}}Link{{end}}</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
 {{end}}{{end}}

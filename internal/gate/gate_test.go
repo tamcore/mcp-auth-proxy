@@ -141,7 +141,7 @@ func TestBlockPushFailureVariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(msg, "may have failed") {
+	if !strings.Contains(msg, "No phone notification went out") {
 		t.Fatalf("want push-failure variant, got: %s", msg)
 	}
 }
@@ -282,5 +282,24 @@ func TestApproveURLShape(t *testing.T) {
 	d := e.gate.DenyURL("abc")
 	if !strings.HasPrefix(d, "http://proxy.local/deny/abc?sig=") {
 		t.Fatalf("deny url: %s", d)
+	}
+}
+
+func TestPendingCodeKeptInMemoryUntilExpiry(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	if _, err := e.gate.Block(ctx, e.key, "echo__echo"); err != nil {
+		t.Fatal(err)
+	}
+	ch := e.ntf.last()
+	if code, ok := e.gate.PendingCode(ch.ID); !ok || code != ch.PendingOTP {
+		t.Fatalf("pending code: %q %v", code, ok)
+	}
+	if _, ok := e.gate.PendingCode("unknown"); ok {
+		t.Fatal("unknown challenge must have no code")
+	}
+	e.advance(4 * time.Minute)
+	if _, ok := e.gate.PendingCode(ch.ID); ok {
+		t.Fatal("expired code must be gone")
 	}
 }

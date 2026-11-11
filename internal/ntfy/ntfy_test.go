@@ -22,10 +22,11 @@ func TestHTTPPublisherPayloadShape(t *testing.T) {
 	pub := NewHTTPPublisher(srv.URL, "", srv.Client(), nil)
 	ch := &store.Challenge{ID: "c1", KeyID: "k1", ToolName: "echo__echo", PendingOTP: "12345",
 		ExpiresAt: time.Date(2025, 1, 1, 12, 3, 0, 0, time.UTC)}
-	n := NewNotifier(pub, "mytopic",
+	m := challengeMessage(ch, "laptop",
 		func(id string) string { return "http://p/approve/" + id + "?sig=aa" },
 		func(id string) string { return "http://p/deny/" + id + "?sig=bb" })
-	if err := n.Notify(context.Background(), ch, "laptop"); err != nil {
+	m.Topic = "mytopic"
+	if err := pub.Publish(context.Background(), m); err != nil {
 		t.Fatal(err)
 	}
 	assertPayload(t, &got)
@@ -81,10 +82,10 @@ func TestHTTPPublisherError(t *testing.T) {
 func TestLogPublisherFallback(t *testing.T) {
 	pub := NewLogPublisher(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ch := &store.Challenge{ID: "c1", ToolName: "t", PendingOTP: "12345", ExpiresAt: time.Now()}
-	n := NewNotifier(pub, "topic",
+	m := challengeMessage(ch, "laptop",
 		func(id string) string { return "http://p/approve/" + id },
 		func(id string) string { return "http://p/deny/" + id })
-	if err := n.Notify(context.Background(), ch, "laptop"); err != nil {
+	if err := pub.Publish(context.Background(), m); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
+	"github.com/tamcore/mcp-auth-proxy/internal/gate"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
@@ -27,6 +28,13 @@ const (
 )
 
 func newTestUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server) {
+	t.Helper()
+	st, ts, _ := newTestUIGate(t, mutate...)
+	return st, ts
+}
+
+// newTestUIGate also returns the gate that backs the portal's pending card.
+func newTestUIGate(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server, *gate.Gate) {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -55,12 +63,14 @@ func newTestUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *htt
 	for _, f := range mutate {
 		f(cfg)
 	}
-	ui := New(st, cfg, secret, view.New(nil), nil)
+	g := gate.New(gate.Options{Store: st, Digits: 5, Expiry: 3 * time.Minute, MaxAttempts: 3,
+		RenotifyFloor: 30 * time.Second, DefaultTTL: 8 * time.Hour, BaseURL: cfg.BaseURL, SignSecret: secret})
+	ui := New(st, cfg, secret, view.New(nil), g, nil)
 	mux := http.NewServeMux()
 	ui.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return st, ts
+	return st, ts, g
 }
 
 func seedUser(t *testing.T, st *store.Store, name, pw string) *store.User {

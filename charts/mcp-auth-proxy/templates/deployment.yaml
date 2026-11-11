@@ -21,9 +21,6 @@ spec:
         {{- if .Values.extraCACerts }}
         checksum/ca: {{ .Values.extraCACerts | sha256sum }}
         {{- end }}
-        {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
-        checksum/ntfy: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
-        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -66,35 +63,15 @@ spec:
             - name: ops
               containerPort: 9090
               protocol: TCP
-          {{- $ntfySecret := and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
-          {{- if or .Values.extraCACerts $ntfySecret }}
+          {{- if .Values.extraCACerts }}
           env:
-            {{- if .Values.extraCACerts }}
             # Go adds every file in these dirs to the system roots.
             - name: SSL_CERT_DIR
               value: /etc/ssl/certs:/etc/mcp-auth-proxy-ca
-            {{- end }}
-            {{- if $ntfySecret }}
-            - name: MCP_PROXY_NTFY_TOPIC
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.ntfy.existingSecret }}
-                  key: {{ .Values.ntfy.existingSecretKey }}
-            - name: MCP_PROXY_NTFY_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.ntfy.existingSecret }}
-                  key: {{ .Values.ntfy.existingSecretTokenKey }}
-                  optional: true
-            {{- end }}
           {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}
-            {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
-            - secretRef:
-                name: {{ include "mcp-auth-proxy.fullname" . }}-ntfy
-            {{- end }}
           volumeMounts:
             - name: config
               mountPath: /etc/mcp-auth-proxy

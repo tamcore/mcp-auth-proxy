@@ -1,6 +1,6 @@
 # mcp-auth-proxy configuration. Every key can be overridden by an environment
 # variable prefixed with MCP_PROXY_ (dots become underscores), e.g.
-# MCP_PROXY_SESSION_TTL=4h or MCP_PROXY_NTFY_TOPIC=mytopic.
+# MCP_PROXY_SESSION_TTL=4h or MCP_PROXY_OTP_DIGITS=6.
 
 # Canonical public URL of this proxy. Used to build approve/deny button URLs
 # and the MCP URL shown by `key create`.
@@ -25,11 +25,9 @@ otp:
   attempts: 3          # wrong attempts before the challenge is exhausted
   renotify_floor: 30s  # a new blocked call within this window does not re-push
 
-ntfy:
-  url: https://ntfy.sh
-  topic: my-private-topic   # required when enabled
-  # token: tk_…             # optional access token; prefer MCP_PROXY_NTFY_TOKEN
-  enabled: false            # when false, notifications are only logged
+# Push notifications are per user: every user sets their own ntfy server,
+# topic and optional access token in the portal. There is no global ntfy
+# setting; keys created with the CLI (no owner) log their codes instead.
 
 # Users of the multi-user instance. A user missing from the database is created
 # on start with a single-use invite link (logged each start until used) to set

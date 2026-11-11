@@ -21,7 +21,6 @@ const (
 	DefaultBaseURL       = "http://127.0.0.1:8080"
 	DefaultStateDir      = "./data"
 	DefaultSessionTTL    = 8 * time.Hour
-	DefaultNtfyURL       = "https://ntfy.sh"
 	// DefaultAuditRetention is the default audit-log TTL (30 days).
 	DefaultAuditRetention = 30 * 24 * time.Hour
 )
@@ -44,12 +43,13 @@ type Config struct {
 	StateDir      string
 	SessionTTL    time.Duration
 	OTP           OTPConfig
-	Ntfy          NtfyConfig
-	Audit         AuditConfig
-	Users         []string
-	Admins        []string
-	Upstreams     []UpstreamConfig
-	OAuth         OAuthConfig
+	// LegacyNtfy is set when the config still has the removed global ntfy block.
+	LegacyNtfy bool
+	Audit      AuditConfig
+	Users      []string
+	Admins     []string
+	Upstreams  []UpstreamConfig
+	OAuth      OAuthConfig
 }
 
 // OTPConfig holds the one-time-code gate tuning.
@@ -58,19 +58,6 @@ type OTPConfig struct {
 	Expiry        time.Duration
 	Attempts      int
 	RenotifyFloor time.Duration
-}
-
-// NtfyConfig holds the push notification settings.
-type NtfyConfig struct {
-	URL     string
-	Topic   string
-	Token   string
-	Enabled bool
-}
-
-// String hides the topic and token, which are credentials.
-func (n NtfyConfig) String() string {
-	return fmt.Sprintf("{URL:%s Enabled:%t}", n.URL, n.Enabled)
 }
 
 // AuditConfig holds the audit log settings. Retention is the garbage-collection
@@ -161,12 +148,7 @@ func Load(path string) (*Config, error) {
 			Attempts:      v.GetInt("otp.attempts"),
 			RenotifyFloor: v.GetDuration("otp.renotify_floor"),
 		},
-		Ntfy: NtfyConfig{
-			URL:     v.GetString("ntfy.url"),
-			Topic:   v.GetString("ntfy.topic"),
-			Token:   v.GetString("ntfy.token"),
-			Enabled: v.GetBool("ntfy.enabled"),
-		},
+		LegacyNtfy: v.IsSet("ntfy.url") || v.IsSet("ntfy.topic") || v.IsSet("ntfy.enabled"),
 		Audit: AuditConfig{
 			Enabled:      v.GetBool("audit.enabled"),
 			LogResponses: v.GetBool("audit.log_responses"),
@@ -201,8 +183,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otp.expiry", DefaultOTPExpiry)
 	v.SetDefault("otp.attempts", DefaultOTPAttempts)
 	v.SetDefault("otp.renotify_floor", DefaultOTPRenotifyFloor)
-	v.SetDefault("ntfy.url", DefaultNtfyURL)
-	v.SetDefault("ntfy.enabled", false)
 	v.SetDefault("audit.enabled", true)
 	v.SetDefault("audit.log_responses", false)
 	v.SetDefault("audit.retention", DefaultAuditRetention)
@@ -237,9 +217,6 @@ func (c *Config) Validate() error {
 	}
 	if err := c.OTP.validate(); err != nil {
 		errs = append(errs, err)
-	}
-	if c.Ntfy.Enabled && strings.TrimSpace(c.Ntfy.Topic) == "" {
-		errs = append(errs, errors.New("config: ntfy.topic is required when ntfy.enabled is true"))
 	}
 	userSet, userErrs := validateUsers(c.Users, c.Admins)
 	errs = append(errs, userErrs...)

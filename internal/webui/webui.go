@@ -11,26 +11,29 @@ import (
 
 // WebUI is the login + portal handler set.
 type WebUI struct {
-	store    *store.Store
-	cfg      *config.Config
-	sessions *Sessions
-	pages    *view.Renderer
-	links    *pendingLinks
-	logger   *slog.Logger
+	store     *store.Store
+	cfg       *config.Config
+	sessions  *Sessions
+	pages     *view.Renderer
+	approvals Approvals
+	links     *pendingLinks
+	logger    *slog.Logger
 }
 
 // New builds the web UI.
-func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Renderer, logger *slog.Logger) *WebUI {
+func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Renderer,
+	approvals Approvals, logger *slog.Logger) *WebUI {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &WebUI{
-		store:    st,
-		cfg:      cfg,
-		sessions: NewSessions(signSecret, nil),
-		pages:    pages,
-		links:    &pendingLinks{m: map[string]pendingLink{}},
-		logger:   logger,
+		store:     st,
+		cfg:       cfg,
+		sessions:  NewSessions(signSecret, nil),
+		pages:     pages,
+		approvals: approvals,
+		links:     &pendingLinks{m: map[string]pendingLink{}},
+		logger:    logger,
 	}
 }
 
@@ -44,6 +47,7 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /portal/key/revoke", ui.handleRevokeKey)
 	mux.HandleFunc("POST /portal/key/upstreams", ui.handleKeyUpstreams)
 	mux.HandleFunc("POST /portal/key/delete", ui.handleDeleteKey)
+	mux.HandleFunc("POST /portal/key/end-session", ui.handleEndKeySession)
 	mux.HandleFunc("POST /portal/upstream", ui.handleAddUpstream)
 	mux.HandleFunc("POST /portal/upstream/delete", ui.handleDeleteUpstream)
 	mux.HandleFunc("GET /portal/audit", ui.handleAudit)
@@ -56,6 +60,9 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /portal/upstream/callback", ui.handleUpstreamCallback)
 	mux.HandleFunc("POST /portal/upstream/unlink", ui.handleUpstreamUnlink)
 	mux.HandleFunc("GET /portal/upstream/tools", ui.handleUpstreamTools)
+	mux.HandleFunc("POST /portal/notify", ui.handleNotifySave)
+	mux.HandleFunc("POST /portal/notify/delete", ui.handleNotifyDelete)
+	mux.HandleFunc("GET /portal/pending", ui.handlePendingIDs)
 }
 
 // Sessions exposes the session verifier for the OAuth authorize gate.

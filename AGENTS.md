@@ -42,7 +42,7 @@ internal/
   store/                 SQLite: migrator, keys, sessions/challenges, oauth, sign secret
   gate/                  OTP challenge/session state machine
   identity/              mak_/map_ credential resolution
-  ntfy/                  push publisher + log-only fallback
+  ntfy/                  per-user push (validate, publish) + log-only fallback
   mcpserver/             per-key MCP server, namespaced tools, auth tool
   ui/                    HTML templates, Tailwind CSS, theme JS; /static/ handler
   oauthserver/           client-facing OAuth AS + consent page

@@ -115,3 +115,39 @@ func TestRemoveRevokedKeyAndAuthzExpiry(t *testing.T) {
 		t.Fatalf("key must be gone: %v", err)
 	}
 }
+
+func TestEndKeySession(t *testing.T) {
+	st, ts := newLinkUI(t, "https://idp/token")
+	ctx := context.Background()
+	uid := linkUserID
+	now := time.Now().UTC()
+	key := &store.Key{ID: "k_end", Kind: store.KeyKindStatic, Label: "end-me", SecretHash: "h_end",
+		Upstreams: []string{testEcho}, TTLSeconds: 60, CreatedAt: now, UserID: &uid}
+	if err := st.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	sess := &store.Session{KeyID: key.ID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), Origin: "otp"}
+	if err := st.UpsertSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	bob := login(t, ts, testBob, linkPw)
+	if !strings.Contains(portalBody(t, ts, bob), `action="/portal/key/end-session"`) {
+		t.Fatal("authorized key must offer End session")
+	}
+	end := func(cookie *http.Cookie) int {
+		code, _ := postForm(t, ts, cookie, "/portal/key/end-session", url.Values{"id": {key.ID}})
+		return code
+	}
+	if code := end(login(t, ts, testAlice, linkPw)); code != http.StatusNotFound {
+		t.Fatalf("foreign key: want 404, got %d", code)
+	}
+	if code := end(bob); code != http.StatusSeeOther {
+		t.Fatalf("end session: want 303, got %d", code)
+	}
+	if _, err := st.GetSession(ctx, key.ID, now); err != store.ErrNotFound {
+		t.Fatalf("session must be gone: %v", err)
+	}
+	if got, _ := st.KeyByID(ctx, key.ID); got.Revoked() {
+		t.Fatal("ending the session must not revoke the key")
+	}
+}

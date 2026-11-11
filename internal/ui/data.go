@@ -45,12 +45,26 @@ type Key struct {
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.
 type PortalData struct {
 	Error        string
+	NotifyURL    string
+	Pending      []Pending
 	NewToken     string
 	MCPEndpoint  string
 	MCPURL       string
 	Servers      []Server
 	Keys         []Key
 	OAuthClients []string
+}
+
+// Pending is an open authorization request on one of the user's keys. Code
+// is empty after a restart (the code then lives only in the notification).
+type Pending struct {
+	ID         string
+	Key        string
+	Tool       string
+	Expires    time.Time
+	Code       string
+	ApproveURL string
+	DenyURL    string
 }
 
 // AuditData feeds audit.tmpl.
@@ -88,4 +102,6 @@ type ResultData struct {
 	Tone    string
 	Heading string
 	Message string
+	// Back is an optional link target shown as "Back to portal".
+	Back string
 }

@@ -76,6 +76,7 @@ func (ui *WebUI) renderPortalStatus(w http.ResponseWriter, r *http.Request, user
 	}
 	data := portalData(globals, ui.ownUpstreams(r, user.ID), ui.ownKeys(r, user.ID), ui.cfg, newToken, linked)
 	data.Error = errMsg
+	ui.notifyAndPending(r, user, &data)
 	now := time.Now().UTC()
 	for i := range data.Keys {
 		if sess, err := ui.store.GetSession(r.Context(), data.Keys[i].ID, now); err == nil {
@@ -170,6 +171,28 @@ func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// handleEndKeySession ends the current authorization of one of the user's
+// keys; its next tool call is gated again.
+func (ui *WebUI) handleEndKeySession(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	key, err := ui.store.KeyByID(r.Context(), r.PostForm.Get("id"))
+	if err != nil || key.UserID == nil || *key.UserID != user.ID {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := ui.store.DeleteSession(r.Context(), key.ID); err != nil {
+		ui.logger.Error("end key session", "key", key.ID, "error", err)
+		http.Error(w, "could not end session", http.StatusInternalServerError)
+		return
+	}
+	ui.logger.Info("key session ended", "key", key.ID, "user", user.Username)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // handleDeleteKey removes one of the user's revoked keys; its audit history

@@ -1,10 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -44,8 +42,8 @@ func TestDefaults(t *testing.T) {
 	if cfg.OpsListenAddr != DefaultOpsListenAddr {
 		t.Fatalf("ops listen addr default = %q", cfg.OpsListenAddr)
 	}
-	if cfg.Ntfy.Enabled {
-		t.Fatal("ntfy must default to disabled")
+	if cfg.LegacyNtfy {
+		t.Fatal("minimal config has no ntfy block")
 	}
 }
 
@@ -61,19 +59,13 @@ func TestEnvOverride(t *testing.T) {
 	}
 }
 
-func TestNtfyTokenFromEnvAndHidden(t *testing.T) {
-	t.Setenv("MCP_PROXY_NTFY_TOKEN", "tk_secret")
-	t.Setenv("MCP_PROXY_NTFY_TOPIC", "topic_secret")
-	cfg, err := Load(writeCfg(t, minimal))
+func TestLegacyNtfyBlockIsFlagged(t *testing.T) {
+	cfg, err := Load(writeCfg(t, minimal+"\nntfy: {enabled: true, url: https://ntfy.sh, topic: t}\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Ntfy.Token != "tk_secret" {
-		t.Fatalf("ntfy token = %q", cfg.Ntfy.Token)
-	}
-	s := fmt.Sprintf("%v %+v", cfg.Ntfy, cfg.Ntfy)
-	if strings.Contains(s, "tk_secret") || strings.Contains(s, "topic_secret") {
-		t.Fatalf("ntfy credentials printable: %s", s)
+	if !cfg.LegacyNtfy {
+		t.Fatal("a config with the removed ntfy block must be flagged")
 	}
 }
 
@@ -82,12 +74,6 @@ func TestValidationFailures(t *testing.T) {
 		"empty base_url": `
 base_url: ""
 state_dir: ./data
-upstreams: [{name: e, command: [x]}]
-`,
-		"ntfy enabled without topic": `
-base_url: http://x
-state_dir: ./data
-ntfy: {enabled: true, url: https://ntfy.sh}
 upstreams: [{name: e, command: [x]}]
 `,
 		"upstream with both url and command": `

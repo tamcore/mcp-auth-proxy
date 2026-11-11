@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"sync"
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
@@ -48,6 +49,11 @@ type Gate struct {
 	now           func() time.Time
 	newID         func() string
 	rand          io.Reader
+
+	// codes holds the plaintext code of open challenges for the portal; it is
+	// never persisted, so a restart only loses the portal display.
+	codesMu sync.Mutex
+	codes   map[string]pendingCode
 
 	// OnChallenge fires once per newly created challenge (metrics hook).
 	OnChallenge func()
@@ -84,6 +90,7 @@ func New(o Options) *Gate {
 		now:           o.Now,
 		newID:         o.NewID,
 		rand:          o.Rand,
+		codes:         map[string]pendingCode{},
 	}
 	if g.now == nil {
 		g.now = func() time.Time { return time.Now().UTC() }
@@ -160,7 +167,36 @@ func (g *Gate) newChallenge(ctx context.Context, key *store.Key,
 	if err := g.store.CreateChallenge(ctx, ch); err != nil {
 		return nil, err
 	}
+	g.rememberCode(ch.ID, otp, ch.ExpiresAt, now)
 	return ch, nil
+}
+
+type pendingCode struct {
+	otp     string
+	expires time.Time
+}
+
+func (g *Gate) rememberCode(id, otp string, expires, now time.Time) {
+	g.codesMu.Lock()
+	defer g.codesMu.Unlock()
+	for k, c := range g.codes {
+		if !now.Before(c.expires) {
+			delete(g.codes, k)
+		}
+	}
+	g.codes[id] = pendingCode{otp: otp, expires: expires}
+}
+
+// PendingCode returns the plaintext code of an open challenge, if this
+// process created it and it has not expired.
+func (g *Gate) PendingCode(id string) (string, bool) {
+	g.codesMu.Lock()
+	defer g.codesMu.Unlock()
+	c, ok := g.codes[id]
+	if !ok || !g.now().Before(c.expires) {
+		return "", false
+	}
+	return c.otp, true
 }
 
 // Verify checks an OTP against the key's pending challenge and, on success,
@@ -288,11 +324,11 @@ func (g *Gate) genOTP() (string, error) {
 // marks the variant used when the notification may not have been delivered.
 func blockedMessage(keyLabel, toolName string, digits int, expires time.Time, pushFailed bool) string {
 	msg := fmt.Sprintf("Blocked: tool %q on key %q requires a one-time code. "+
-		"Ask the owner for the %d-digit code from the phone notification (expires %s). "+
+		"Ask the owner for the %d-digit code from their phone notification or the web portal (expires %s). "+
 		"Then call the `auth` tool with that code (argument `otp`) and retry this exact tool call.",
 		toolName, keyLabel, digits, expires.Format(time.RFC3339))
 	if pushFailed {
-		msg += " The phone notification may have failed to send."
+		msg += " No phone notification went out; the owner finds the code in the web portal."
 	}
 	return msg
 }

@@ -59,20 +59,6 @@ config:
   #     name: Claude
   #     redirect_uris: ["https://claude.ai/api/mcp/callback"]
 
-ntfy:
-  # When enabled, the one-time code is pushed to this topic. The topic is a
-  # credential-like value, so it goes into a Secret, never the ConfigMap.
-  enabled: false
-  url: https://ntfy.sh
-  topic: ""
-  # Optional access token (tk_…) for a server that requires auth on the topic.
-  token: ""
-  # Use an existing Secret instead: topic under existingSecretKey, optional
-  # token under existingSecretTokenKey.
-  existingSecret: ""
-  existingSecretKey: MCP_PROXY_NTFY_TOPIC
-  existingSecretTokenKey: MCP_PROXY_NTFY_TOKEN
-
 persistence:
   enabled: true
   existingClaim: ""
@@ -102,7 +88,7 @@ httpRoute:
   #     sectionName: https
   hostnames: []
 
-# Extra CA certificates (PEM) trusted for outgoing TLS to ntfy and upstreams,
+# Extra CA certificates (PEM) trusted for outgoing TLS to users' ntfy servers and upstreams,
 # e.g. a private root CA. Added to the system roots, not replacing them.
 extraCACerts: ""
 

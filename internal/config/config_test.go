@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,6 +41,9 @@ func TestDefaults(t *testing.T) {
 	if cfg.ListenAddr != DefaultListenAddr {
 		t.Fatalf("listen addr default = %q", cfg.ListenAddr)
 	}
+	if cfg.OpsListenAddr != DefaultOpsListenAddr {
+		t.Fatalf("ops listen addr default = %q", cfg.OpsListenAddr)
+	}
 	if cfg.Ntfy.Enabled {
 		t.Fatal("ntfy must default to disabled")
 	}
@@ -53,6 +58,22 @@ func TestEnvOverride(t *testing.T) {
 	}
 	if cfg.SessionTTL != time.Hour || cfg.OTP.Digits != 6 {
 		t.Fatalf("env override ignored: ttl=%v digits=%d", cfg.SessionTTL, cfg.OTP.Digits)
+	}
+}
+
+func TestNtfyTokenFromEnvAndHidden(t *testing.T) {
+	t.Setenv("MCP_PROXY_NTFY_TOKEN", "tk_secret")
+	t.Setenv("MCP_PROXY_NTFY_TOPIC", "topic_secret")
+	cfg, err := Load(writeCfg(t, minimal))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Ntfy.Token != "tk_secret" {
+		t.Fatalf("ntfy token = %q", cfg.Ntfy.Token)
+	}
+	s := fmt.Sprintf("%v %+v", cfg.Ntfy, cfg.Ntfy)
+	if strings.Contains(s, "tk_secret") || strings.Contains(s, "topic_secret") {
+		t.Fatalf("ntfy credentials printable: %s", s)
 	}
 }
 
@@ -85,6 +106,13 @@ state_dir: ./data
 upstreams: [{name: e, command: [x]}]
 oauth:
   clients: [{client_id: c, name: C}]
+`,
+		"ops listener on the app address": `
+base_url: http://x
+state_dir: ./data
+listen_addr: 127.0.0.1:8080
+ops_listen_addr: 127.0.0.1:8080
+upstreams: [{name: e, command: [x]}]
 `,
 		"bad otp digits": `
 base_url: http://x

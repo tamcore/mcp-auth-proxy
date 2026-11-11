@@ -29,6 +29,7 @@ type Upstream struct {
 	store   *store.Store
 	httpc   *http.Client
 	logger  *slog.Logger
+	owner   string
 	mu      sync.Mutex
 	client  *mcp.Client
 	session *mcp.ClientSession
@@ -50,6 +51,15 @@ func NewPool(cfgs []config.UpstreamConfig, st *store.Store, httpc *http.Client, 
 	}
 	return p
 }
+
+// WithOwner returns a fresh, unconnected copy of u whose OAuth tokens belong
+// to the given user.
+func (u *Upstream) WithOwner(userID string) *Upstream {
+	return &Upstream{cfg: u.cfg, store: u.store, httpc: u.httpc, logger: u.logger, owner: userID}
+}
+
+// OAuth reports whether the upstream authenticates with per-user OAuth tokens.
+func (u *Upstream) OAuth() bool { return u.cfg.OAuth != nil }
 
 // NewFromConfig builds a single Upstream from a config (also used for
 // database-defined per-user upstreams).
@@ -132,6 +142,18 @@ func (u *Upstream) httpClientWithAuth() *http.Client {
 }
 
 // Tools returns the upstream's tool list, connecting if needed.
+// Close ends the upstream session (and a stdio child process), if any.
+func (u *Upstream) Close() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.session == nil {
+		return nil
+	}
+	err := u.session.Close()
+	u.session, u.client, u.tools = nil, nil, nil
+	return err
+}
+
 func (u *Upstream) Tools(ctx context.Context) ([]mcp.Tool, error) {
 	if err := u.Connect(ctx); err != nil {
 		return nil, err

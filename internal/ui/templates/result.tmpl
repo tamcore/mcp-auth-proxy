@@ -1,0 +1,13 @@
+{{define "content"}}{{with .Data}}
+<div class="mx-auto max-w-sm pt-10 text-center">
+  <div class="card" data-testid="result" data-tone="{{.Tone}}">
+    <div class="mx-auto mb-4 grid size-14 place-items-center rounded-full {{if eq .Tone "ok"}}bg-teal-100 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300{{else if eq .Tone "error"}}bg-rose-100 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300{{else}}bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300{{end}}" aria-hidden="true">
+      <svg viewBox="0 0 24 24" class="size-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        {{if eq .Tone "ok"}}<path d="M5 12.5l4.5 4.5L19 7.5"/>{{else if eq .Tone "error"}}<path d="M12 8v5M12 16.5v.5"/>{{else}}<path d="M7 7l10 10M17 7L7 17"/>{{end}}
+      </svg>
+    </div>
+    <h1 class="mb-2 text-xl font-semibold text-slate-900 dark:text-white">{{.Heading}}</h1>
+    <p class="muted">{{.Message}}</p>
+  </div>
+</div>
+{{end}}{{end}}

@@ -17,12 +17,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // authCode is a single-use, expiring in-memory authorization code.
@@ -42,6 +44,7 @@ type Server struct {
 	now    func() time.Time
 	rand   io.Reader
 	logger *slog.Logger
+	pages  *ui.Renderer
 
 	mu    sync.Mutex
 	codes map[string]*authCode
@@ -52,13 +55,15 @@ type Server struct {
 }
 
 // New builds the AS. Clients are seeded into the store from config.
-func New(ctx context.Context, st *store.Store, cfg *config.Config, logger *slog.Logger) (*Server, error) {
+func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Renderer,
+	logger *slog.Logger) (*Server, error) {
 	s := &Server{
 		store:  st,
 		cfg:    cfg,
 		now:    func() time.Time { return time.Now().UTC() },
 		rand:   rand.Reader,
 		logger: logger,
+		pages:  pages,
 		codes:  map[string]*authCode{},
 	}
 	for i := range cfg.OAuth.Clients {
@@ -126,12 +131,7 @@ func (s *Server) validateAuthorize(ctx context.Context, q url.Values) (*authoriz
 }
 
 func exactMatch(registered []string, want string) bool {
-	for _, u := range registered {
-		if u == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(registered, want)
 }
 
 // HandleConsent serves POST /oauth/consent: on approval it creates the OAuth

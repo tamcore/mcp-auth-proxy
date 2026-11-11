@@ -18,6 +18,7 @@ concurrency:
 env:
   # Pinned tool versions. CI must never resolve a floating "latest".
   GOLANGCI_LINT_VERSION: v2.15.0 # renovate: datasource=github-releases depName=golangci/golangci-lint
+  TAILWIND_VERSION: v4.3.5 # renovate: datasource=github-releases depName=tailwindlabs/tailwindcss
 
 jobs:
   verify:
@@ -41,6 +42,19 @@ jobs:
         run: |
           go mod tidy
           git diff --exit-code -- go.mod go.sum
+
+      - name: Verify generated Tailwind CSS
+        run: |
+          bin="${RUNNER_TEMP}/bin"
+          mkdir -p "${bin}"
+          base="https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}"
+          curl -fsSL -o "${bin}/tailwindcss-linux-x64" "${base}/tailwindcss-linux-x64"
+          curl -fsSL "${base}/sha256sums.txt" | grep ' ./tailwindcss-linux-x64$' | sed 's# ./# #' \
+            | (cd "${bin}" && sha256sum -c -)
+          mv "${bin}/tailwindcss-linux-x64" "${bin}/tailwindcss"
+          chmod +x "${bin}/tailwindcss"
+          PATH="${bin}:${PATH}" go generate ./internal/ui
+          git diff --exit-code -- internal/ui/assets
 
       - name: go vet
         run: go vet ./... && go vet -tags e2e ./e2e/ && go vet -tags live ./live/
@@ -93,6 +107,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      # No --with-deps: the runner image already has Chrome's shared libraries,
+      # and apt mirrors are a frequent source of flakes.
+      - name: Install Chromium for playwright-go
+        run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --only-shell chromium
 
       - name: E2E tests (with -race)
         run: go test -race -tags e2e -count=1 -timeout 300s ./e2e/

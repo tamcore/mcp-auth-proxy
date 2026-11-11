@@ -150,6 +150,7 @@ func startEnv(t *testing.T) *env {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`base_url: %s
 listen_addr: 127.0.0.1:%d
+ops_listen_addr: 127.0.0.1:0
 state_dir: %s
 session_ttl: 8h
 ntfy:
@@ -177,7 +178,7 @@ upstreams:
 	// Wait for readiness.
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := e.client.Get(base + "/metrics")
+		resp, err := e.client.Get(base + "/login")
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {

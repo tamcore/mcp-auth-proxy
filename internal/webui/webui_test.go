@@ -13,6 +13,7 @@ import (
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 	pwField    = "password"
 )
 
-func newTestUI(t *testing.T) (*store.Store, *httptest.Server) {
+func newTestUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server) {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -51,7 +52,10 @@ func newTestUI(t *testing.T) (*store.Store, *httptest.Server) {
 		Audit: config.AuditConfig{Enabled: true, Retention: 720 * time.Hour},
 		OAuth: config.OAuthConfig{TokenTTL: time.Hour, AuthorizeCodeTTL: 10 * time.Minute},
 	}
-	ui := New(st, cfg, secret, nil)
+	for _, f := range mutate {
+		f(cfg)
+	}
+	ui := New(st, cfg, secret, view.New(nil), nil)
 	mux := http.NewServeMux()
 	ui.Register(mux)
 	ts := httptest.NewServer(mux)
@@ -248,6 +252,57 @@ func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 	invites2, err := st.EnsureConfigUsers(ctx, []string{testAlice, testBob}, nil, time.Now().UTC())
 	if err != nil || len(invites2) != 2 {
 		t.Fatalf("passwordless users must get a fresh invite each start: %v %v", invites2, err)
+	}
+	// re-minting revokes the previous unused link
+	if _, err := st.ConsumeInvite(ctx, invites[testBob], time.Now().UTC()); err != store.ErrNotFound {
+		t.Fatalf("superseded invite must be invalid: %v", err)
+	}
+	if _, err := st.ConsumeInvite(ctx, invites2[testBob], time.Now().UTC()); err != nil {
+		t.Fatalf("fresh invite must work: %v", err)
+	}
+}
+
+func TestLoginPageNeverShowsInvites(t *testing.T) {
+	st, ts := newTestUI(t)
+	if _, err := st.EnsureConfigUsers(context.Background(), []string{testAlice}, nil, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Get(ts.URL + "/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if strings.Contains(string(body), "/invite/") || strings.Contains(string(body), testAlice) {
+		t.Fatal("login page must not expose invite links or usernames")
+	}
+}
+
+func TestAdminMarksPendingInvite(t *testing.T) {
+	st, ts := newTestUI(t)
+	ctx := context.Background()
+	hash, err := store.HashPassword("secret-pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := st.CreateUser(ctx, &store.User{ID: "u_alice", Username: testAlice, PasswordHash: hash, Admin: true,
+		CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser(ctx, &store.User{ID: "u_bob", Username: testBob, CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin", nil)
+	req.AddCookie(login(t, ts, testAlice, "secret-pw"))
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "invite pending") {
+		t.Fatalf("admin page must mark bob as invite pending: %d", resp.StatusCode)
 	}
 }
 

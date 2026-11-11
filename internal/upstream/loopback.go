@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // callbackResult is the payload delivered by the loopback callback handler.
@@ -25,17 +27,22 @@ func startLoopback(ctx context.Context) (*http.Server, int, <-chan callbackResul
 		return nil, 0, nil, fmt.Errorf("upstream: loopback listen: %w", err)
 	}
 	resCh := make(chan callbackResult, 1)
+	pages := ui.New(nil)
 	mux := http.NewServeMux()
+	mux.Handle("GET /static/", pages.Static())
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if e := q.Get("error"); e != "" {
 			resCh <- callbackResult{err: fmt.Errorf("upstream: authorize error: %s", e)}
-			http.Error(w, "authorization failed; you can close this tab", http.StatusBadRequest)
+			pages.Render(w, http.StatusBadRequest, "result", ui.Page{Title: "Authorization failed", Data: ui.ResultData{
+				Tone: ui.ToneError, Heading: "Authorization failed", Message: "You can close this tab.",
+			}})
 			return
 		}
 		resCh <- callbackResult{code: q.Get("code"), state: q.Get("state")}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprint(w, "<html><body><p>Authorization received. You can close this tab.</p></body></html>")
+		pages.Render(w, http.StatusOK, "result", ui.Page{Title: "Authorization received", Data: ui.ResultData{
+			Tone: ui.ToneOK, Heading: "Authorization received", Message: "You can close this tab.",
+		}})
 	})
 	srv := &http.Server{Handler: mux}
 	go func() {

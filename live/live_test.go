@@ -69,6 +69,7 @@ func startProxy(t *testing.T) (base, cfgPath string) {
 	cfgPath = filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`base_url: %s
 listen_addr: 127.0.0.1:%d
+ops_listen_addr: 127.0.0.1:0
 state_dir: %s
 session_ttl: 8h
 upstreams:
@@ -91,7 +92,7 @@ upstreams:
 	client := &http.Client{Timeout: 10 * time.Second}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(base + "/metrics")
+		resp, err := client.Get(base + "/login")
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {

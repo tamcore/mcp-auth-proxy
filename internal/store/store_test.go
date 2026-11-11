@@ -199,7 +199,7 @@ func TestUpstreamTokenRoundTrip(t *testing.T) {
 	if err := st.SaveUpstreamToken(ctx, tok); err != nil {
 		t.Fatal(err)
 	}
-	got, err := st.GetUpstreamToken(ctx, "echo")
+	got, err := st.GetUpstreamToken(ctx, "echo", "")
 	if err != nil || got.AccessToken != "at" || got.RefreshToken != "rt" || got.ExpiresAt == nil {
 		t.Fatalf("token: %+v %v", got, err)
 	}
@@ -208,12 +208,37 @@ func TestUpstreamTokenRoundTrip(t *testing.T) {
 	if err := st.SaveUpstreamToken(ctx, rotated); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = st.GetUpstreamToken(ctx, "echo")
+	got, _ = st.GetUpstreamToken(ctx, "echo", "")
 	if got.AccessToken != "at2" || got.RefreshToken != "rt2" {
 		t.Fatalf("rotation not persisted: %+v", got)
 	}
-	if _, err := st.GetUpstreamToken(ctx, "nope"); err != ErrNotFound {
+	if _, err := st.GetUpstreamToken(ctx, "nope", ""); err != ErrNotFound {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpstreamTokensArePerUser(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	for _, tok := range []*UpstreamToken{
+		{Upstream: "garmin", UserID: "u_a", AccessToken: "at-a"},
+		{Upstream: "garmin", UserID: "u_b", AccessToken: "at-b"},
+	} {
+		if err := st.SaveUpstreamToken(ctx, tok); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for user, want := range map[string]string{"u_a": "at-a", "u_b": "at-b"} {
+		got, err := st.GetUpstreamToken(ctx, "garmin", user)
+		if err != nil || got.AccessToken != want || got.UserID != user {
+			t.Fatalf("%s: %+v %v", user, got, err)
+		}
+	}
+	if _, err := st.GetUpstreamToken(ctx, "garmin", "u_c"); err != ErrNotFound {
+		t.Fatalf("other user must have no token: %v", err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, "garmin", ""); err != ErrNotFound {
+		t.Fatalf("user tokens must not leak to the unowned slot: %v", err)
 	}
 }
 
@@ -245,5 +270,65 @@ func TestSignSecretCreated0600(t *testing.T) {
 	again, err := EnsureSignSecret(dir)
 	if err != nil || string(again) != string(secret) {
 		t.Fatal("secret not stable across calls")
+	}
+}
+
+const (
+	delUp    = "garmin-del"
+	delUserA = "u_del_a"
+	delUserB = "u_del_b"
+)
+
+func TestDeleteUpstreamTokenOnlyForUser(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	for _, uid := range []string{delUserA, delUserB} {
+		if err := st.SaveUpstreamToken(ctx, &UpstreamToken{Upstream: delUp, UserID: uid, AccessToken: "at"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.DeleteUpstreamToken(ctx, delUp, delUserA); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, delUp, delUserA); err != ErrNotFound {
+		t.Fatalf("u_a token must be gone: %v", err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, delUp, delUserB); err != nil {
+		t.Fatalf("u_b token must stay: %v", err)
+	}
+}
+
+const runUser = "u_usr"
+
+func TestRunnableUserUpstreamsOnlyAdminsRunCommands(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	for _, u := range []*User{
+		{ID: "u_adm", Username: "adm", Admin: true, CreatedAt: now},
+		{ID: runUser, Username: "usr", CreatedAt: now},
+	} {
+		if err := st.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		for _, up := range []*UserUpstream{
+			{ID: "us_cmd_" + u.ID, UserID: u.ID, Name: "cmd", Command: []string{"sh"}, CreatedAt: now},
+			{ID: "us_url_" + u.ID, UserID: u.ID, Name: "web", URL: "https://x/mcp", CreatedAt: now},
+		} {
+			if err := st.CreateUserUpstream(ctx, up); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for uid, want := range map[string]int{"u_adm": 2, runUser: 1} {
+		ups, err := st.RunnableUserUpstreams(ctx, uid)
+		if err != nil || len(ups) != want {
+			t.Fatalf("%s: want %d runnable, got %d (%v)", uid, want, len(ups), err)
+		}
+		for _, u := range ups {
+			if uid == runUser && len(u.Command) > 0 {
+				t.Fatal("non-admin stdio upstream must not be runnable")
+			}
+		}
 	}
 }

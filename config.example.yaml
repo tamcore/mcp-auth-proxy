@@ -9,6 +9,9 @@ base_url: http://127.0.0.1:8080
 # Listen address of the HTTP server.
 listen_addr: 127.0.0.1:8080
 
+# Ops listener: /metrics, /healthz, /readyz. Keep it off the public network.
+ops_listen_addr: 127.0.0.1:9090
+
 # State directory: holds proxy.db and sign.secret (mode 0600).
 state_dir: ./data
 
@@ -25,10 +28,11 @@ otp:
 ntfy:
   url: https://ntfy.sh
   topic: my-private-topic   # required when enabled
+  # token: tk_…             # optional access token; prefer MCP_PROXY_NTFY_TOKEN
   enabled: false            # when false, notifications are only logged
 
 # Users of the multi-user instance. A user missing from the database is created
-# on start with a single-use invite link (logged once) through which they set
+# on start with a single-use invite link (logged each start until used) to set
 # their own password. `admins` is the only place the admin role is toggled;
 # admins can disable users and mint new invite links in the web UI (/admin).
 users: [alice, bob]
@@ -53,11 +57,13 @@ upstreams:
   #   users: [alice]        # omit for global (all users)
   #   headers:
   #     X-Custom: value
-  #   oauth:               # optional: `upstream link remote` once, then tokens
-  #     authorize_url: https://idp.example.com/authorize   # are refreshed and
-  #     token_url: https://idp.example.com/token           # persisted for you
+  #   oauth:               # optional: each user links their own account in the
+  #     authorize_url: https://idp.example.com/authorize   # portal; tokens are
+  #     token_url: https://idp.example.com/token           # per user, refreshed
   #     client_id: my-client-id
   #     scopes: ["mcp:read", "mcp:write"]
+  #     resource: https://mcp.example.com/mcp   # RFC 8707; byte-exact as in the
+  #                                             # upstream's oauth-protected-resource
 
 # Client-facing OAuth authorization server (authorization-code + PKCE S256).
 # Logging in grants identity only; every tool call still needs the OTP.

@@ -1,12 +1,12 @@
 // Package server wires the HTTP mux: /mcp and /mcp/{token} for MCP (bearer or
 // path auth), the /oauth endpoints of the client-facing AS, the signed
-// /approve/{id} and /deny/{id} button routes, and /metrics.
+// /approve/{id} and /deny/{id} button routes. /metrics, /healthz and /readyz
+// live on the separate ops listener.
 package server
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -20,6 +20,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/metrics"
 	"github.com/tamcore/mcp-auth-proxy/internal/oauthserver"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/ui"
 	"github.com/tamcore/mcp-auth-proxy/internal/webui"
 )
 
@@ -33,21 +34,27 @@ type Server struct {
 	proxy    *mcpserver.Proxy
 	as       *oauthserver.Server
 	gate     *gate.Gate
+	store    *store.Store
 	metrics  *metrics.Metrics
 	webui    *webui.WebUI
+	pages    *ui.Renderer
 	logger   *slog.Logger
 }
 
 // New builds the root handler's dependencies.
 func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 	proxy *mcpserver.Proxy, m *metrics.Metrics, signSecret []byte, logger *slog.Logger) (*Server, error) {
-	as, err := oauthserver.New(ctx, st, cfg, logger)
+	if logger == nil {
+		logger = slog.Default()
+	}
+	pages := ui.New(logger)
+	as, err := oauthserver.New(ctx, st, cfg, pages, logger)
 	if err != nil {
 		return nil, err
 	}
-	ui := webui.New(st, cfg, signSecret, logger)
+	web := webui.New(st, cfg, signSecret, pages, logger)
 	as.CurrentUser = func(r *http.Request) *store.User {
-		u, _ := ui.Sessions().User(r, st)
+		u, _ := web.Sessions().User(r, st)
 		return u
 	}
 	return &Server{
@@ -56,8 +63,10 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 		proxy:    proxy,
 		as:       as,
 		gate:     g,
+		store:    st,
 		metrics:  m,
-		webui:    ui,
+		webui:    web,
+		pages:    pages,
 		logger:   logger,
 	}, nil
 }
@@ -69,12 +78,31 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/mcp", s.authMiddleware(mcpHandler))
 	mux.Handle("/mcp/", s.authMiddleware(mcpHandler))
 	s.webui.Register(mux)
+	mux.Handle("GET /static/", s.pages.Static())
 	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
 	mux.HandleFunc("POST /oauth/consent", s.as.HandleConsent)
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
-	mux.HandleFunc("/approve/{id}", s.handleApprove)
-	mux.HandleFunc("/deny/{id}", s.handleDeny)
-	mux.Handle("/metrics", s.metrics.Handler())
+	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
+	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
+	return mux
+}
+
+// OpsHandler serves the ops endpoints: /metrics, /healthz (process up) and
+// /readyz (database reachable).
+func (s *Server) OpsHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", s.metrics.Handler())
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.store.DB().PingContext(r.Context()); err != nil {
+			s.logger.Warn("readyz: database unreachable", "error", err)
+			http.Error(w, "database unreachable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ok\n"))
+	})
 	return mux
 }
 
@@ -149,18 +177,39 @@ func (s *Server) handleSignButton(w http.ResponseWriter, r *http.Request, approv
 	} else {
 		err = s.gate.Deny(r.Context(), id, sig)
 	}
+	status, res := signResult(approve, err)
+	s.pages.Render(w, status, "result", ui.Page{Title: res.Heading, Data: res})
+}
+
+func signResult(approve bool, err error) (int, ui.ResultData) {
 	switch {
+	case err == nil && approve:
+		return http.StatusOK, ui.ResultData{Tone: ui.ToneOK, Heading: "Approved",
+			Message: "The session is authorized; the AI client can retry its tool call."}
 	case err == nil:
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if approve {
-			_, _ = fmt.Fprintln(w, "Approved. The session is authorized; the AI client can retry its tool call.")
-		} else {
-			_, _ = fmt.Fprintln(w, "Denied. The tool call stays blocked.")
-		}
+		return http.StatusOK, ui.ResultData{Tone: ui.ToneDeny, Heading: "Denied",
+			Message: "The tool call stays blocked."}
 	case errors.Is(err, gate.ErrBadSignature):
-		http.Error(w, "forbidden", http.StatusForbidden)
+		return http.StatusForbidden, ui.ResultData{Tone: ui.ToneError, Heading: "Forbidden",
+			Message: "This link has an invalid signature."}
 	default:
-		http.Error(w, "not found", http.StatusNotFound)
+		return http.StatusNotFound, ui.ResultData{Tone: ui.ToneError, Heading: "Not found",
+			Message: "This request is unknown or has expired."}
+	}
+}
+
+// allowCrossOrigin lets the ntfy web app POST the Approve/Deny actions. The
+// links carry no cookies; the HMAC signature is the authorization.
+func allowCrossOrigin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next(w, r)
 	}
 }
 

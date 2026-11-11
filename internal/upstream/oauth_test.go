@@ -29,7 +29,7 @@ func TestRefreshRotationPersists(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if r.PostForm.Get("grant_type") != "refresh_token" {
+		if r.PostForm.Get("grant_type") != "refresh_token" || r.PostForm.Get("resource") != "https://api/mcp" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -62,6 +62,7 @@ func TestRefreshRotationPersists(t *testing.T) {
 			AuthorizeURL: "http://unused/authorize",
 			TokenURL:     tokenSrv.URL,
 			ClientID:     "cid",
+			Resource:     "https://api/mcp",
 		},
 	}
 	expired := time.Now().Add(-time.Minute)
@@ -83,7 +84,7 @@ func TestRefreshRotationPersists(t *testing.T) {
 	if refreshes.Load() == 0 {
 		t.Fatal("refresh token was not used")
 	}
-	got, err := st.GetUpstreamToken(ctx, "api")
+	got, err := st.GetUpstreamToken(ctx, "api", "")
 	if err != nil {
 		t.Fatal(err)
 	}

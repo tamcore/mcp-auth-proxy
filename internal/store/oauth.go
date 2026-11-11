@@ -132,9 +132,11 @@ func (s *Store) AccessTokenByHash(ctx context.Context, hash string, now time.Tim
 	return &t, nil
 }
 
-// UpstreamToken is the stored token set of one upstream OAuth link.
+// UpstreamToken is the stored token set of one user's upstream OAuth link.
+// UserID "" is the unowned slot (CLI link, keys without a user).
 type UpstreamToken struct {
 	Upstream     string
+	UserID       string
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    *time.Time
@@ -142,16 +144,16 @@ type UpstreamToken struct {
 	UpdatedAt    time.Time
 }
 
-// GetUpstreamToken loads the stored token set for an upstream.
-func (s *Store) GetUpstreamToken(ctx context.Context, upstream string) (*UpstreamToken, error) {
+// GetUpstreamToken loads a user's stored token set for an upstream.
+func (s *Store) GetUpstreamToken(ctx context.Context, upstream, userID string) (*UpstreamToken, error) {
 	var t UpstreamToken
 	var expires any
 	var created, updated string
 	err := scanOne(ctx, s,
-		`SELECT upstream, access_token, refresh_token, expires_at, created_at, updated_at
-FROM upstream_tokens WHERE upstream = ?`,
-		[]any{upstream},
-		&t.Upstream, &t.AccessToken, &t.RefreshToken, &expires, &created, &updated)
+		`SELECT upstream, user_id, access_token, refresh_token, expires_at, created_at, updated_at
+FROM upstream_tokens WHERE upstream = ? AND user_id = ?`,
+		[]any{upstream, userID},
+		&t.Upstream, &t.UserID, &t.AccessToken, &t.RefreshToken, &expires, &created, &updated)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +174,7 @@ FROM upstream_tokens WHERE upstream = ?`,
 	return &t, nil
 }
 
-// SaveUpstreamToken upserts the (possibly rotated) token set of an upstream.
+// SaveUpstreamToken upserts a user's (possibly rotated) token set.
 func (s *Store) SaveUpstreamToken(ctx context.Context, t *UpstreamToken) error {
 	var expires any
 	if t.ExpiresAt != nil {
@@ -180,13 +182,24 @@ func (s *Store) SaveUpstreamToken(ctx context.Context, t *UpstreamToken) error {
 	}
 	now := FormatTime(nowUTC())
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO upstream_tokens (upstream, access_token, refresh_token, expires_at, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT (upstream) DO UPDATE SET access_token = excluded.access_token, refresh_token = excluded.refresh_token,
+INSERT INTO upstream_tokens
+    (upstream, user_id, access_token, refresh_token, expires_at, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (upstream, user_id) DO UPDATE SET access_token = excluded.access_token,
+    refresh_token = excluded.refresh_token,
     expires_at = excluded.expires_at, updated_at = excluded.updated_at`,
-		t.Upstream, t.AccessToken, t.RefreshToken, expires, now, now)
+		t.Upstream, t.UserID, t.AccessToken, t.RefreshToken, expires, now, now)
 	if err != nil {
 		return fmt.Errorf("store: save upstream token: %w", err)
+	}
+	return nil
+}
+
+// DeleteUpstreamToken removes a user's token set for an upstream (unlink).
+func (s *Store) DeleteUpstreamToken(ctx context.Context, upstream, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM upstream_tokens WHERE upstream = ? AND user_id = ?`, upstream, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete upstream token: %w", err)
 	}
 	return nil
 }

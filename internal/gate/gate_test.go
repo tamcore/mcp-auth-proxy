@@ -188,7 +188,7 @@ func TestVerifyAttemptsExhaust(t *testing.T) {
 	if wrong == otp {
 		wrong = "88888"
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := e.gate.Verify(ctx, e.key, wrong); !errors.Is(err, ErrWrongCode) {
 			t.Fatalf("attempt %d: want ErrWrongCode, got %v", i, err)
 		}

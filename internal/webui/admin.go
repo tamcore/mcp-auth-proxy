@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // requireAdmin redirects non-admins to the portal.
@@ -26,13 +27,7 @@ func (ui *WebUI) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	users, err := ui.store.ListUsers(r.Context())
-	if err != nil {
-		http.Error(w, "could not list users", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(page("admin", adminBody(admin, users, ""))))
+	ui.renderAdmin(w, r, admin, http.StatusOK, "", "")
 }
 
 func (ui *WebUI) handleAdminDisable(w http.ResponseWriter, r *http.Request) {
@@ -66,50 +61,19 @@ func (ui *WebUI) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not create invite", http.StatusInternalServerError)
 		return
 	}
-	users, _ := ui.store.ListUsers(r.Context())
 	link := strings.TrimRight(ui.cfg.BaseURL, "/") + "/invite/" + token
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(page("admin", adminBody(admin, users, link))))
+	ui.renderAdmin(w, r, admin, http.StatusOK, link, "")
 }
 
-func adminBody(admin *store.User, users []*store.User, newInvite string) string {
-	var b strings.Builder
-	b.WriteString(`<h1>Admin</h1>
-<div class="card row"><span>Logged in as <strong>` + esc(admin.Username) + `</strong> (admin)</span>
-<a href="/">back to portal</a></div>`)
-	if newInvite != "" {
-		b.WriteString(`<div class="card"><strong>Invite link — show it once and hand it over:</strong><br>
-<code>` + esc(newInvite) + `</code><br><span class="muted">single-use, expires in 7 days</span></div>`)
+// renderAdmin shows users and OAuth upstreams. invite and errMsg are one-off
+// banners.
+func (ui *WebUI) renderAdmin(w http.ResponseWriter, r *http.Request, admin *store.User,
+	status int, invite, errMsg string) {
+	users, err := ui.store.ListUsers(r.Context())
+	if err != nil {
+		http.Error(w, "could not list users", http.StatusInternalServerError)
+		return
 	}
-	b.WriteString(`<div class="card"><h2>Users</h2>
-<table><tr><th>user</th><th>role</th><th>state</th><th>actions</th></tr>`)
-	for _, u := range users {
-		role := "user"
-		if u.Admin {
-			role = "admin"
-		}
-		state := "active"
-		if u.Disabled {
-			state = "disabled"
-		}
-		b.WriteString("<tr><td>" + esc(u.Username) + "</td><td>" + role + "</td><td>" + state + "</td><td>")
-		dis := "disable"
-		val := "1"
-		if u.Disabled {
-			dis = "enable"
-			val = "0"
-		}
-		b.WriteString(`<form class="inline" method="post" action="/admin/disable">` +
-			`<input type="hidden" name="id" value="` + esc(u.ID) + `">` +
-			`<input type="hidden" name="disabled" value="` + val + `">` +
-			`<button class="ghost">` + dis + `</button></form> `)
-		b.WriteString(`<form class="inline" method="post" action="/admin/invite">` +
-			`<input type="hidden" name="id" value="` + esc(u.ID) + `">` +
-			`<button class="ghost">new invite link</button></form>`)
-		b.WriteString("</td></tr>")
-	}
-	b.WriteString(`</table>
-<p class="muted">Admins are toggled only in the config file (admins list). A disabled user
-cannot log in and their API keys stop working immediately.</p></div>`)
-	return b.String()
+	data := view.AdminData{Users: users, Invite: invite, Error: errMsg}
+	ui.pages.Render(w, status, "admin", page("Admin", admin, data))
 }

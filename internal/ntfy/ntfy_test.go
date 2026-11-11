@@ -1,6 +1,7 @@
 package ntfy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -18,7 +19,7 @@ func TestHTTPPublisherPayloadShape(t *testing.T) {
 	var got Message
 	srv := httptest.NewServer(captureHandler(t, &got))
 	defer srv.Close()
-	pub := NewHTTPPublisher(srv.URL, srv.Client())
+	pub := NewHTTPPublisher(srv.URL, "", srv.Client(), nil)
 	ch := &store.Challenge{ID: "c1", KeyID: "k1", ToolName: "echo__echo", PendingOTP: "12345",
 		ExpiresAt: time.Date(2025, 1, 1, 12, 3, 0, 0, time.UTC)}
 	n := NewNotifier(pub, "mytopic",
@@ -71,7 +72,7 @@ func TestHTTPPublisherError(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	pub := NewHTTPPublisher(srv.URL, srv.Client())
+	pub := NewHTTPPublisher(srv.URL, "", srv.Client(), nil)
 	if err := pub.Publish(context.Background(), Message{Topic: "t"}); err == nil {
 		t.Fatal("want error on 500")
 	}
@@ -85,5 +86,54 @@ func TestLogPublisherFallback(t *testing.T) {
 		func(id string) string { return "http://p/deny/" + id })
 	if err := n.Notify(context.Background(), ch, "laptop"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHTTPPublisherAuth(t *testing.T) {
+	var auth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = append(auth, r.Header.Get("Authorization"))
+	}))
+	defer srv.Close()
+	for _, token := range []string{"tk_secret", ""} {
+		if err := NewHTTPPublisher(srv.URL, token, srv.Client(), nil).Publish(context.Background(), Message{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if auth[0] != "Bearer tk_secret" || auth[1] != "" {
+		t.Fatalf("authorization headers: %q", auth)
+	}
+}
+
+func TestHTTPPublisherWarnsOnRejectedToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	err := NewHTTPPublisher(srv.URL, "tk_bad", srv.Client(), logger).Publish(context.Background(), Message{Topic: "t"})
+	if err == nil || !strings.Contains(err.Error(), "403") {
+		t.Fatalf("want 403 error, got %v", err)
+	}
+	if !strings.Contains(buf.String(), `"level":"WARN"`) || !strings.Contains(buf.String(), `"status":403`) {
+		t.Fatalf("want WARN log with status, got %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "tk_bad") || strings.Contains(buf.String(), `"t"`) {
+		t.Fatal("token and topic must never be logged")
+	}
+}
+
+func TestHTTPPublisherWarnsOnTransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	if err := NewHTTPPublisher(url, "tk_x", nil, logger).Publish(context.Background(), Message{Topic: "t"}); err == nil {
+		t.Fatal("want error for unreachable server")
+	}
+	if !strings.Contains(buf.String(), `"level":"WARN"`) || !strings.Contains(buf.String(), "ntfy publish failed") {
+		t.Fatalf("want WARN on transport error, got %s", buf.String())
 	}
 }

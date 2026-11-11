@@ -19,6 +19,13 @@ import (
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
+	ts := httptest.NewServer(newTestSrv(t).Handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func newTestSrv(t *testing.T) *Server {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	st, err := store.Open(ctx, filepath.Join(dir, "proxy.db"))
@@ -52,20 +59,32 @@ func newTestServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-	return ts
+	return srv
 }
 
-func TestMetricsEndpoint(t *testing.T) {
-	ts := newTestServer(t)
-	resp, err := http.Get(ts.URL + "/metrics")
+func statusOf(t *testing.T, url string) int {
+	t.Helper()
+	resp, err := http.Get(url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("metrics status %d", resp.StatusCode)
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestOpsEndpointsOnlyOnOpsListener(t *testing.T) {
+	srv := newTestSrv(t)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	ops := httptest.NewServer(srv.OpsHandler())
+	defer ops.Close()
+	for _, path := range []string{"/metrics", "/healthz", "/readyz"} {
+		if code := statusOf(t, ops.URL+path); code != http.StatusOK {
+			t.Fatalf("ops %s: %d", path, code)
+		}
+		if code := statusOf(t, ts.URL+path); code == http.StatusOK {
+			t.Fatalf("app listener must not serve %s", path)
+		}
 	}
 }
 
@@ -135,5 +154,31 @@ func TestLoginPageServed(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login page: %d", resp.StatusCode)
+	}
+}
+
+func TestApproveDenyAllowCrossOriginFromNtfyWebApp(t *testing.T) {
+	ts := newTestServer(t)
+	for _, path := range []string{"/approve/x", "/deny/x"} {
+		req, _ := http.NewRequest(http.MethodOptions, ts.URL+path, nil)
+		req.Header.Set("Origin", "https://ntfy.example")
+		req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent || resp.Header.Get("Access-Control-Allow-Origin") != "*" ||
+			!strings.Contains(resp.Header.Get("Access-Control-Allow-Methods"), http.MethodPost) {
+			t.Fatalf("%s preflight: %d %v", path, resp.StatusCode, resp.Header)
+		}
+		resp, err = http.Post(ts.URL+path+"?sig=bad", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden || resp.Header.Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatalf("%s: bad sig must stay 403 and carry CORS: %d", path, resp.StatusCode)
+		}
 	}
 }

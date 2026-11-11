@@ -1,0 +1,146 @@
+{{define "content"}}{{with .Data}}
+{{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
+{{if .NewToken}}
+<section class="card border-teal-300 ring-4 ring-teal-500/10 dark:border-teal-400/40" aria-labelledby="newkey" data-testid="new-key">
+  <h2 id="newkey" class="card-title">New key, copy it now</h2>
+  <p class="muted mb-4">The token is shown only once.</p>
+  <dl class="space-y-3 text-sm">
+    <div class="flex flex-wrap items-center gap-2">
+      <dt class="w-20 font-medium">Token</dt>
+      <dd class="flex min-w-0 flex-1 items-center gap-2"><code class="mono min-w-0 flex-1" data-testid="token">{{.NewToken}}</code>
+        <button type="button" class="btn-ghost" data-copy="{{.NewToken}}">Copy</button></dd>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <dt class="w-20 font-medium">MCP URL</dt>
+      <dd class="flex min-w-0 flex-1 items-center gap-2"><code class="mono min-w-0 flex-1">{{.MCPURL}}</code>
+        <button type="button" class="btn-ghost" data-copy="{{.MCPURL}}">Copy</button></dd>
+    </div>
+  </dl>
+</section>
+{{end}}
+
+<div class="grid gap-6 md:grid-cols-2">
+  <section class="card" aria-labelledby="keys">
+    <h2 id="keys" class="card-title">Your keys</h2>
+    {{if not .Keys}}<p class="muted">None yet.</p>{{end}}
+    <ul class="divide-y divide-slate-200 dark:divide-slate-700">
+      {{range .Keys}}
+      <li class="flex flex-wrap items-center gap-2 py-3 first:pt-0 last:pb-0" data-testid="key">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <strong>{{.Label}}</strong>
+            {{if .Revoked}}<span class="badge">revoked</span>{{else}}<span class="badge-accent">active</span>{{end}}
+          </div>
+          <div class="mt-1 flex flex-wrap gap-1">
+            <code class="muted font-mono text-xs">{{.ID}} · {{.Kind}}</code>
+            {{range .Upstreams}}<span class="badge">{{.}}</span>{{end}}
+          </div>
+        </div>
+        {{if not .Revoked}}
+        <form method="post" action="/portal/key/revoke">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="btn-danger">Revoke</button>
+        </form>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="create">
+    <h2 id="create" class="card-title">Create a key</h2>
+    <form method="post" action="/portal/key" class="space-y-4">
+      <div>
+        <label class="field-label" for="label">Label</label>
+        <input class="field" id="label" type="text" name="label" maxlength="80" placeholder="e.g. Claude on my laptop">
+      </div>
+      <fieldset>
+        <legend class="field-label">MCP servers</legend>
+        <div class="flex flex-wrap gap-2">
+          {{range .Servers}}
+          <label class="badge cursor-pointer has-checked:bg-teal-50 has-checked:text-teal-800 has-checked:ring-1 has-checked:ring-teal-300 dark:has-checked:bg-teal-400/10 dark:has-checked:text-teal-200 dark:has-checked:ring-teal-400/40">
+            <input type="checkbox" name="upstream" value="{{.Name}}" checked class="accent-teal-700 dark:accent-teal-400"> {{.Name}}
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <button type="submit" class="btn">Create key</button>
+    </form>
+  </section>
+</div>
+
+<section class="card" aria-labelledby="servers">
+  <h2 id="servers" class="card-title">MCP servers</h2>
+  {{if not .Servers}}<p class="muted">No servers available.</p>{{end}}
+  <ul class="space-y-2">
+    {{range .Servers}}
+    <li class="flex flex-wrap items-center gap-2" data-testid="server">
+      <strong>{{.Name}}</strong>
+      <span class="{{if eq .Kind "own"}}badge-accent{{else}}badge{{end}}">{{.Kind}}</span>
+      {{if .OAuth}}{{if .Linked}}<span class="badge-accent">linked</span>{{else}}<span class="badge">not linked</span>{{end}}{{end}}
+      <code class="muted min-w-0 flex-1 truncate font-mono text-xs">{{.Source}}</code>
+      <button type="button" class="btn-ghost" data-tools="{{.Name}}">Tools</button>
+      {{if .OAuth}}
+      <form method="post" action="/portal/upstream/link">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button class="{{if .Linked}}btn-ghost{{else}}btn{{end}}">{{if .Linked}}Re-link{{else}}Link my account{{end}}</button>
+      </form>
+      {{if .Linked}}
+      <form method="post" action="/portal/upstream/unlink">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button class="btn-danger">Unlink</button>
+      </form>
+      {{end}}
+      {{end}}
+      {{if .ID}}
+      <form method="post" action="/portal/upstream/delete">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn-danger">Delete</button>
+      </form>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  <form method="post" action="/portal/upstream" class="mt-6 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2 dark:border-slate-700">
+    <h3 class="text-sm font-semibold sm:col-span-2">Add your own server</h3>
+    <div>
+      <label class="field-label" for="up-name">Name</label>
+      <input class="field" id="up-name" type="text" name="name" required maxlength="40">
+    </div>
+    <div>
+      <label class="field-label" for="up-url">URL</label>
+      <input class="field" id="up-url" type="url" name="url" placeholder="https://…/mcp">
+    </div>
+    <div>
+      <label class="field-label" for="up-bearer">Bearer token <span class="muted">(optional, for URL)</span></label>
+      <input class="field" id="up-bearer" type="password" name="bearer" autocomplete="off" placeholder="e.g. a long-lived access token">
+    </div>
+    {{if $.User.Admin}}
+    <div>
+      <label class="field-label" for="up-cmd">or stdio command <span class="muted">(admins only; runs in the proxy)</span></label>
+      <input class="field" id="up-cmd" type="text" name="command" placeholder="binary arg…">
+    </div>
+    {{end}}
+    <div class="sm:col-span-2"><button type="submit" class="btn">Add server</button></div>
+  </form>
+</section>
+
+<dialog id="tools-dialog" aria-labelledby="tools-title" class="m-auto w-[min(42rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-xl backdrop:bg-slate-900/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+  <div class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+    <h2 id="tools-title" class="text-base font-semibold"></h2>
+    <form method="dialog"><button class="btn-ghost" aria-label="Close">Close</button></form>
+  </div>
+  <p class="muted px-5 pt-4" data-tools-status></p>
+  <ul class="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-4" data-tools-list></ul>
+</dialog>
+
+<section class="card" aria-labelledby="oauth">
+  <h2 id="oauth" class="card-title">Connect an OAuth client</h2>
+  {{if .OAuthClients}}
+  <p class="muted mb-3">Start the OAuth flow from the client. It lands here after login.</p>
+  <div class="flex flex-wrap gap-2">{{range .OAuthClients}}<span class="badge">{{.}}</span>{{end}}</div>
+  {{else}}
+  <p class="muted">No OAuth clients registered in config.</p>
+  {{end}}
+</section>
+{{end}}{{end}}

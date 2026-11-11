@@ -57,6 +57,9 @@ type Options struct {
 
 // New builds the proxy.
 func New(o Options) *Proxy {
+	if o.Logger == nil {
+		o.Logger = slog.Default()
+	}
 	return &Proxy{
 		pool: o.Pool, store: o.Store, gate: o.Gate, metrics: o.Metrics, logger: o.Logger,
 		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses,
@@ -72,25 +75,28 @@ func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, err
 	if ok {
 		return srv, nil
 	}
-	srv, err := p.build(ctx, key)
-	if err != nil {
-		return nil, err
+	srv, complete := p.build(ctx, key)
+	if complete {
+		p.mu.Lock()
+		p.servers[key.ID] = srv
+		p.mu.Unlock()
 	}
-	p.mu.Lock()
-	p.servers[key.ID] = srv
-	p.mu.Unlock()
 	return srv, nil
 }
 
-func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, error) {
+// build assembles the key's server. A failing upstream only drops its own
+// tools; the result is then incomplete and not cached, so it is retried.
+func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, bool) {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
 	p.addAuthTool(srv, key)
+	complete := true
 	for _, name := range key.Upstreams {
 		if err := p.addUpstreamTools(ctx, srv, key, name); err != nil {
-			return nil, err
+			p.logger.Warn("upstream unavailable for key", "key", key.ID, "upstream", name, "error", err)
+			complete = false
 		}
 	}
-	return srv, nil
+	return srv, complete
 }
 
 func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *store.Key, name string) error {
@@ -99,6 +105,9 @@ func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *stor
 		return err
 	}
 	tools, err := u.Tools(ctx)
+	if errors.Is(err, upstream.ErrNoToken) {
+		return fmt.Errorf("mcpserver: upstream %s is not linked for this user; link it in the web portal: %w", name, err)
+	}
 	if err != nil {
 		return fmt.Errorf("mcpserver: upstream %s: %w", name, err)
 	}
@@ -116,30 +125,54 @@ func (p *Proxy) addUpstreamTools(ctx context.Context, srv *mcp.Server, key *stor
 }
 
 // resolveUpstream finds a named upstream for a key: the key owner's own
-// database upstreams win over same-named global ones.
+// database upstreams win over same-named global ones, and a global OAuth
+// upstream runs with the key owner's own token.
 func (p *Proxy) resolveUpstream(ctx context.Context, key *store.Key, name string) (*upstream.Upstream, error) {
-	if key.UserID != nil {
-		p.mu.Lock()
-		cache, ok := p.userUps[*key.UserID]
-		p.mu.Unlock()
-		if !ok {
-			ups, err := p.store.ListUserUpstreams(ctx, *key.UserID)
-			if err != nil {
-				return nil, err
-			}
-			cache = map[string]*upstream.Upstream{}
-			for _, row := range ups {
-				cache[row.Name] = upstream.NewFromConfig(row.Config(), p.store, nil, p.logger)
-			}
-			p.mu.Lock()
-			p.userUps[*key.UserID] = cache
-			p.mu.Unlock()
-		}
-		if u, ok := cache[name]; ok {
-			return u, nil
-		}
+	if key.UserID == nil {
+		return p.pool.Get(name)
 	}
-	return p.pool.Get(name)
+	cache, err := p.userCache(ctx, *key.UserID)
+	if err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if u, ok := cache[name]; ok {
+		return u, nil
+	}
+	u, err := p.pool.Get(name)
+	if err != nil || !u.OAuth() {
+		return u, err
+	}
+	owned := u.WithOwner(*key.UserID)
+	cache[name] = owned
+	return owned, nil
+}
+
+// userCache returns the user's upstream cache, seeded with their database
+// upstreams on first use.
+func (p *Proxy) userCache(ctx context.Context, userID string) (map[string]*upstream.Upstream, error) {
+	p.mu.Lock()
+	cache, ok := p.userUps[userID]
+	p.mu.Unlock()
+	if ok {
+		return cache, nil
+	}
+	ups, err := p.store.RunnableUserUpstreams(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	cache = map[string]*upstream.Upstream{}
+	for _, row := range ups {
+		cache[row.Name] = upstream.NewFromConfig(row.Config(), p.store, nil, p.logger)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if existing, ok := p.userUps[userID]; ok {
+		return existing, nil
+	}
+	p.userUps[userID] = cache
+	return cache, nil
 }
 
 // audit records one proxied call for the portal audit log.

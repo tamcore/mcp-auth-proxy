@@ -12,6 +12,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // allowedUpstreams returns the global config upstreams the user may use.
@@ -58,11 +59,24 @@ func (ui *WebUI) handlePortal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *WebUI) renderPortal(w http.ResponseWriter, r *http.Request, user *store.User, newToken string) {
+	ui.renderPortalStatus(w, r, user, http.StatusOK, newToken, "")
+}
+
+// renderPortalStatus renders the portal with an HTTP status and an optional
+// one-off error banner.
+func (ui *WebUI) renderPortalStatus(w http.ResponseWriter, r *http.Request, user *store.User,
+	status int, newToken, errMsg string) {
 	globals := ui.allowedUpstreams(user.Username)
-	own := ui.ownUpstreams(r, user.ID)
-	keys := ui.ownKeys(r, user.ID)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(portalPage(user, globals, own, keys, ui.cfg, newToken)))
+	linked := map[string]bool{}
+	for _, u := range globals {
+		if u.OAuth != nil {
+			_, err := ui.store.GetUpstreamToken(r.Context(), u.Name, user.ID)
+			linked[u.Name] = err == nil
+		}
+	}
+	data := portalData(globals, ui.ownUpstreams(r, user.ID), ui.ownKeys(r, user.ID), ui.cfg, newToken, linked)
+	data.Error = errMsg
+	ui.pages.Render(w, status, "portal", page("mcp-auth-proxy", user, data))
 }
 
 func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +143,7 @@ func (ui *WebUI) validateChosenUpstreams(ctx context.Context, user *store.User, 
 }
 
 func (ui *WebUI) ownUpstreamsCtx(ctx context.Context, userID string) []*store.UserUpstream {
-	ups, err := ui.store.ListUserUpstreams(ctx, userID)
+	ups, err := ui.store.RunnableUserUpstreams(ctx, userID)
 	if err != nil {
 		return nil
 	}
@@ -161,8 +175,17 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	url := strings.TrimSpace(r.PostForm.Get("url"))
 	command := strings.TrimSpace(r.PostForm.Get("command"))
+	bearer := strings.TrimSpace(r.PostForm.Get("bearer"))
 	if name == "" || (url == "") == (command == "") {
 		http.Error(w, "name and exactly one of url/command required", http.StatusBadRequest)
+		return
+	}
+	if command != "" && !user.Admin {
+		http.Error(w, "only admins may add stdio command servers", http.StatusForbidden)
+		return
+	}
+	if bearer != "" && url == "" {
+		http.Error(w, "a bearer token needs a url", http.StatusBadRequest)
 		return
 	}
 	id := make([]byte, 8)
@@ -176,6 +199,9 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	}
 	if command != "" {
 		up.Command = strings.Fields(command)
+	}
+	if bearer != "" {
+		up.Headers = map[string]string{"Authorization": "Bearer " + bearer}
 	}
 	if err := ui.store.CreateUserUpstream(r.Context(), up); err != nil {
 		http.Error(w, "could not save upstream (name taken?)", http.StatusBadRequest)
@@ -208,6 +234,9 @@ func (ui *WebUI) handleAudit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not load audit log", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(auditPage(user, entries, ui.cfg.Audit)))
+	ui.pages.Render(w, http.StatusOK, "audit", page("audit log", user, view.AuditData{
+		Retention: ui.cfg.Audit.Retention.String(),
+		Responses: responsesLabel(ui.cfg.Audit),
+		Entries:   entries,
+	}))
 }

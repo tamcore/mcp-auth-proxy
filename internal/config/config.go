@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,10 +16,12 @@ import (
 // Defaults.
 const (
 	DefaultListenAddr = "127.0.0.1:8080"
-	DefaultBaseURL    = "http://127.0.0.1:8080"
-	DefaultStateDir   = "./data"
-	DefaultSessionTTL = 8 * time.Hour
-	DefaultNtfyURL    = "https://ntfy.sh"
+	// DefaultOpsListenAddr serves /metrics, /healthz and /readyz.
+	DefaultOpsListenAddr = "127.0.0.1:9090"
+	DefaultBaseURL       = "http://127.0.0.1:8080"
+	DefaultStateDir      = "./data"
+	DefaultSessionTTL    = 8 * time.Hour
+	DefaultNtfyURL       = "https://ntfy.sh"
 	// DefaultAuditRetention is the default audit-log TTL (30 days).
 	DefaultAuditRetention = 30 * 24 * time.Hour
 )
@@ -35,17 +38,18 @@ const (
 
 // Config is the validated runtime configuration.
 type Config struct {
-	BaseURL    string
-	ListenAddr string
-	StateDir   string
-	SessionTTL time.Duration
-	OTP        OTPConfig
-	Ntfy       NtfyConfig
-	Audit      AuditConfig
-	Users      []string
-	Admins     []string
-	Upstreams  []UpstreamConfig
-	OAuth      OAuthConfig
+	BaseURL       string
+	ListenAddr    string
+	OpsListenAddr string
+	StateDir      string
+	SessionTTL    time.Duration
+	OTP           OTPConfig
+	Ntfy          NtfyConfig
+	Audit         AuditConfig
+	Users         []string
+	Admins        []string
+	Upstreams     []UpstreamConfig
+	OAuth         OAuthConfig
 }
 
 // OTPConfig holds the one-time-code gate tuning.
@@ -60,7 +64,13 @@ type OTPConfig struct {
 type NtfyConfig struct {
 	URL     string
 	Topic   string
+	Token   string
 	Enabled bool
+}
+
+// String hides the topic and token, which are credentials.
+func (n NtfyConfig) String() string {
+	return fmt.Sprintf("{URL:%s Enabled:%t}", n.URL, n.Enabled)
 }
 
 // AuditConfig holds the audit log settings. Retention is the garbage-collection
@@ -90,12 +100,7 @@ func (u *UpstreamConfig) Allows(username string) bool {
 	if u.Global() {
 		return true
 	}
-	for _, name := range u.Users {
-		if name == username {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(u.Users, username)
 }
 
 // UpstreamOAuthConfig is the OAuth client registration for an upstream that
@@ -105,6 +110,9 @@ type UpstreamOAuthConfig struct {
 	TokenURL     string   `mapstructure:"token_url"`
 	ClientID     string   `mapstructure:"client_id"`
 	Scopes       []string `mapstructure:"scopes"`
+	// Resource is the RFC 8707 resource indicator, byte-exact as the upstream
+	// advertises it in /.well-known/oauth-protected-resource.
+	Resource string `mapstructure:"resource"`
 }
 
 // OAuthConfig is the client-facing authorization server section.
@@ -142,10 +150,11 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cfg := &Config{
-		BaseURL:    v.GetString("base_url"),
-		ListenAddr: v.GetString("listen_addr"),
-		StateDir:   v.GetString("state_dir"),
-		SessionTTL: v.GetDuration("session_ttl"),
+		BaseURL:       v.GetString("base_url"),
+		ListenAddr:    v.GetString("listen_addr"),
+		OpsListenAddr: v.GetString("ops_listen_addr"),
+		StateDir:      v.GetString("state_dir"),
+		SessionTTL:    v.GetDuration("session_ttl"),
 		OTP: OTPConfig{
 			Digits:        v.GetInt("otp.digits"),
 			Expiry:        v.GetDuration("otp.expiry"),
@@ -155,6 +164,7 @@ func Load(path string) (*Config, error) {
 		Ntfy: NtfyConfig{
 			URL:     v.GetString("ntfy.url"),
 			Topic:   v.GetString("ntfy.topic"),
+			Token:   v.GetString("ntfy.token"),
 			Enabled: v.GetBool("ntfy.enabled"),
 		},
 		Audit: AuditConfig{
@@ -184,6 +194,7 @@ func Load(path string) (*Config, error) {
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("base_url", DefaultBaseURL)
 	v.SetDefault("listen_addr", DefaultListenAddr)
+	v.SetDefault("ops_listen_addr", DefaultOpsListenAddr)
 	v.SetDefault("state_dir", DefaultStateDir)
 	v.SetDefault("session_ttl", DefaultSessionTTL)
 	v.SetDefault("otp.digits", DefaultOTPDigits)
@@ -214,6 +225,9 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.ListenAddr) == "" {
 		errs = append(errs, errors.New("config: listen_addr must not be empty"))
+	}
+	if strings.TrimSpace(c.OpsListenAddr) == "" || c.OpsListenAddr == c.ListenAddr {
+		errs = append(errs, errors.New("config: ops_listen_addr must be set and differ from listen_addr"))
 	}
 	if strings.TrimSpace(c.StateDir) == "" {
 		errs = append(errs, errors.New("config: state_dir must not be empty"))

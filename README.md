@@ -18,11 +18,14 @@ code.
 The instance is multi-user. Usernames are declared in the config (`users:`);
 admins only via `admins:`. A configured user missing from the database is
 created on start with a **single-use invite link** (`{base_url}/invite/{token}`,
-logged once) through which they set their own password — no passwords are
-handed over in plaintext.
+logged on every start until used) through which they set their own password —
+no passwords are handed over in plaintext. Only the newest link per user is
+valid, invite tokens are stored as hashes only, and links never appear in the
+web UI except once, right after an admin mints one.
 
 At `{base_url}/login` a user logs in with username+password only and reaches a
-self-contained portal (inline CSS, no external assets) to: create API keys for
+self-contained portal (same-origin CSS and JS only, no external assets; light,
+dark, or auto theme, auto follows the system and is the default) to: create API keys for
 globally configured MCP servers available to them, run the OAuth flow for
 registered clients, add their **own** MCP servers (stored in the database,
 visible only to them), and view their **audit log** — which client called which
@@ -31,8 +34,8 @@ entries garbage-collected after `audit.retention`, default 30 days).
 
 Config upstreams may be global or restricted via `users: [alice]`; a user's own
 upstreams always win over same-named global ones. Admins (`/admin`) can
-temporarily disable users (their keys stop working immediately) and mint new
-invite links.
+temporarily disable users (their keys stop working immediately), see which
+users still have an invite pending, and mint new invite links.
 
 ## Security model: identity is never authorization
 
@@ -40,8 +43,12 @@ OAuth 2.x runs on both sides, but it only proves *who* is calling:
 
 - **Client → proxy**: each client uses a static `mak_…` key or an OAuth `map_…`
   access token. This is its *identity*.
-- **Proxy → upstream**: optionally an OAuth token per upstream, linked once with
-  `upstream link` and refreshed automatically.
+- **Proxy → upstream**: optionally OAuth. Every user links their **own**
+  upstream account in the portal ("Link my account"); tokens are stored and
+  refreshed per user and never shared. A key only reaches an OAuth upstream
+  with its owner's token. Register `{base_url}/portal/upstream/callback` as
+  redirect URI at the upstream's authorization server. The CLI `upstream link`
+  (loopback redirect) links the slot used by keys without a user.
 
 Logging in via OAuth grants an identity — the right to list tools and ask for
 authorization. **Every tool call still requires the one-time code.** There is no
@@ -78,6 +85,10 @@ ntfy:
   topic: your-topic
   enabled: true
 ```
+
+If the server requires auth on the topic, set an access token via
+`MCP_PROXY_NTFY_TOKEN=tk_…` (sent as `Authorization: Bearer`). A rejected
+publish is logged at WARN with the HTTP status.
 
 With `enabled: false` the code and the Approve/Deny URLs are only logged, which
 is handy for local testing.
@@ -122,7 +133,8 @@ mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake
 
 HTTP routes: `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (path auth),
 `/oauth/authorize`, `/oauth/consent`, `/oauth/token`, `/approve/{id}?sig=`,
-`/deny/{id}?sig=`, `/metrics`.
+`/deny/{id}?sig=`, the web UI. The ops listener (`ops_listen_addr`) serves
+`/metrics`, `/healthz` and `/readyz` (database reachable) only; never expose it.
 
 ## Configuration reference
 
@@ -134,6 +146,7 @@ override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
 |-----|---------|---------|
 | `base_url` | `http://127.0.0.1:8080` | canonical public URL (button URLs, MCP URL) |
 | `listen_addr` | `127.0.0.1:8080` | HTTP listen address |
+| `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
 | `state_dir` | `./data` | holds `proxy.db` and `sign.secret` |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
@@ -153,8 +166,13 @@ Secret. Released charts are published to `oci://ghcr.io/tamcore/charts`.
 ```sh
 helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
   --set config.baseURL=https://mcp.example.com \
+  --set 'config.users[0]=alice' --set 'config.admins[0]=alice' \
   --set ntfy.enabled=true --set ntfy.topic=your-topic
 ```
+
+The image trusts only public CAs. If ntfy or an upstream uses a private CA,
+pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the
+system roots via `SSL_CERT_DIR`).
 
 ## Development
 
@@ -166,14 +184,24 @@ gofmt -l .                                   # empty
 go build ./...
 go vet ./...  &&  go vet -tags e2e ./e2e/  &&  go vet -tags live ./live/
 go test -count=1 ./...
-go test -tags e2e -count=1 -timeout 300s ./e2e/
+go test -tags e2e -count=1 -timeout 300s ./e2e/   # includes playwright-go browser tests
 LIVE_GARMIN_BIN=/path/to/garmin-mcp go test -tags live -count=1 -timeout 300s ./live/
 go mod tidy
 golangci-lint run
 golangci-lint run --build-tags e2e ./e2e/
 golangci-lint run --build-tags live ./live/
-helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example
+helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example --set 'config.users[0]=alice'
 ```
+
+The e2e suite drives the web UI in headless Chromium via playwright-go. The
+first run downloads the driver and Chromium; on Linux, install system
+libraries once with
+`go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps --only-shell chromium`.
+
+The stylesheet `internal/ui/assets/app.css` is generated by the Tailwind CSS
+v4 standalone CLI and committed, so `go build` needs no Node toolchain. After
+changing templates or `internal/ui/src/input.css`, put `tailwindcss` on `PATH`
+and run `go generate ./internal/ui`; CI fails if the committed file is stale.
 
 ## License
 

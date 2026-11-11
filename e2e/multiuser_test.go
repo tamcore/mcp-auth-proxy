@@ -49,6 +49,7 @@ func startMultiUserEnv(t *testing.T) (*env, *lockedBuffer) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`base_url: %s
 listen_addr: 127.0.0.1:%d
+ops_listen_addr: 127.0.0.1:0
 state_dir: %s
 session_ttl: 8h
 users: [alice, bob]
@@ -63,6 +64,11 @@ upstreams:
   - name: private
     command: [%q, dev-echo]
     users: [alice]
+oauth:
+  clients:
+    - client_id: e2e
+      name: E2E Client
+      redirect_uris: [http://127.0.0.1:1/cb]
 `, base, port, filepath.Join(dir, "state"), ntfy.srv.URL, binary, binary)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -81,7 +87,7 @@ upstreams:
 	})
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := e.client.Get(base + "/metrics")
+		resp, err := e.client.Get(base + "/login")
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -200,14 +206,14 @@ func toolsAndAudit(t *testing.T, e *env, cookie *http.Cookie, token string) {
 	if !names["echo__echo"] || !names["private__echo"] || !names["auth"] {
 		t.Fatalf("tools: %v", names)
 	}
-	if blocked := callTool(t, sess, "echo__echo", map[string]any{"text": "audit-me"}); !blocked.IsError {
+	if blocked := callTool(t, sess, "echo__echo", map[string]any{textArg: "audit-me"}); !blocked.IsError {
 		t.Fatal("call must be blocked first")
 	}
 	e.ntfy.waitFor(t, 1)
 	if res := callTool(t, sess, "auth", map[string]any{"otp": lastCode(t, e.ntfy)}); res.IsError {
 		t.Fatalf("auth: %q", textOf(res))
 	}
-	if res := callTool(t, sess, "echo__echo", map[string]any{"text": "audit-me"}); res.IsError {
+	if res := callTool(t, sess, "echo__echo", map[string]any{textArg: "audit-me"}); res.IsError {
 		t.Fatalf("retry: %q", textOf(res))
 	}
 	req, _ := http.NewRequest(http.MethodGet, e.base+"/portal/audit", nil)
@@ -220,5 +226,22 @@ func toolsAndAudit(t *testing.T, e *env, cookie *http.Cookie, token string) {
 	_ = resp.Body.Close()
 	if !strings.Contains(string(body), "echo__echo") || !strings.Contains(string(body), "audit-me") {
 		t.Fatal("audit page missing the recorded call")
+	}
+}
+
+func TestServeExitsCleanlyOnSIGINT(t *testing.T) {
+	e, _ := startMultiUserEnv(t)
+	if err := e.cmd.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- e.cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serve must exit 0 on SIGINT: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not exit within 10s of SIGINT")
 	}
 }

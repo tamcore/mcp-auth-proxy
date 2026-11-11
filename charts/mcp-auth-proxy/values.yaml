@@ -22,11 +22,10 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 8080
+  # Ops listener: /metrics, /healthz, /readyz. Never route it publicly; the
+  # httpRoute and ingress only target the http port.
+  opsPort: 9090
 
-# The proxy serves /mcp, /oauth/*, /approve, /deny and /metrics on the same
-# port. The metrics endpoint is unauthenticated but carries only aggregate
-# counters with a closed label vocabulary; keep the Service ClusterIP-only
-# unless the MCP endpoint itself is meant to be public.
 metrics:
   serviceMonitor:
     enabled: false
@@ -40,6 +39,15 @@ config:
   listenAddr: "0.0.0.0:8080"
   sessionTTL: 8h
   logLevel: info
+  # Usernames of the instance. Users missing from the database get a single-use
+  # invite link in the pod log on start. Required.
+  users: []
+  # Admins (subset of users) can disable users and mint invite links at /admin.
+  admins: []
+  audit:
+    enabled: true
+    log_responses: false
+    retention: 720h
   # Upstream MCP servers, as YAML. Each entry has a name and exactly one of
   # url (streamable HTTP) or command (stdio).
   upstreams: []
@@ -57,8 +65,13 @@ ntfy:
   enabled: false
   url: https://ntfy.sh
   topic: ""
+  # Optional access token (tk_…) for a server that requires auth on the topic.
+  token: ""
+  # Use an existing Secret instead: topic under existingSecretKey, optional
+  # token under existingSecretTokenKey.
   existingSecret: ""
   existingSecretKey: MCP_PROXY_NTFY_TOPIC
+  existingSecretTokenKey: MCP_PROXY_NTFY_TOKEN
 
 persistence:
   enabled: true
@@ -77,6 +90,25 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+# Gateway API HTTPRoute, an alternative to the Ingress. TLS terminates at the
+# referenced Gateway listener.
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  #   - name: my-gateway
+  #     namespace: gateway-system
+  #     sectionName: https
+  hostnames: []
+
+# Extra CA certificates (PEM) trusted for outgoing TLS to ntfy and upstreams,
+# e.g. a private root CA. Added to the system roots, not replacing them.
+extraCACerts: ""
+
+resources: {}
+#   requests: {cpu: 10m, memory: 32Mi}
+#   limits: {memory: 128Mi}
 
 podAnnotations: {}
 podLabels: {}

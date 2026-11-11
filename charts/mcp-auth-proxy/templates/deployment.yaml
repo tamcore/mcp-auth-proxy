@@ -18,6 +18,9 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.extraCACerts }}
+        checksum/ca: {{ .Values.extraCACerts | sha256sum }}
+        {{- end }}
         {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
         checksum/ntfy: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- end }}
@@ -51,17 +54,43 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
+            - name: ops
+              containerPort: 9090
+              protocol: TCP
+          {{- $ntfySecret := and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
+          {{- if or .Values.extraCACerts $ntfySecret }}
+          env:
+            {{- if .Values.extraCACerts }}
+            # Go adds every file in these dirs to the system roots.
+            - name: SSL_CERT_DIR
+              value: /etc/ssl/certs:/etc/mcp-auth-proxy-ca
+            {{- end }}
+            {{- if $ntfySecret }}
+            - name: MCP_PROXY_NTFY_TOPIC
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ntfy.existingSecret }}
+                  key: {{ .Values.ntfy.existingSecretKey }}
+            - name: MCP_PROXY_NTFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ntfy.existingSecret }}
+                  key: {{ .Values.ntfy.existingSecretTokenKey }}
+                  optional: true
+            {{- end }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}
-            {{- if and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
-            - secretRef:
-                name: {{ .Values.ntfy.existingSecret }}
-            {{- end }}
             {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
             - secretRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}-ntfy
@@ -72,21 +101,37 @@ spec:
               readOnly: true
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.extraCACerts }}
+            - name: extra-ca
+              mountPath: /etc/mcp-auth-proxy-ca
+              readOnly: true
+            {{- end }}
+          {{- with .Values.resources }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           livenessProbe:
             httpGet:
-              path: /metrics
-              port: http
+              path: /healthz
+              port: ops
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /metrics
-              port: http
+              path: /readyz
+              port: ops
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.extraCACerts }}
+        - name: extra-ca
+          configMap:
+            name: {{ include "mcp-auth-proxy.fullname" . }}-ca
+        {{- end }}
         - name: config
           configMap:
             name: {{ include "mcp-auth-proxy.fullname" . }}

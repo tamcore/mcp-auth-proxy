@@ -1,0 +1,20 @@
+{{define "content"}}{{with .Data}}
+<div class="mx-auto max-w-sm pt-6">
+  <div class="card">
+    <h1 class="mb-1 text-xl font-semibold text-slate-900 dark:text-white">Set your password</h1>
+    <p class="muted mb-5">At least 8 characters. You are logged in right after.</p>
+    <form method="post" action="/invite/{{.Token}}" class="space-y-4">
+      <div>
+        <label class="field-label" for="password">Password</label>
+        <input class="field" id="password" type="password" name="password" required minlength="8" autocomplete="new-password">
+      </div>
+      <div>
+        <label class="field-label" for="password2">Repeat</label>
+        <input class="field" id="password2" type="password" name="password2" required minlength="8" autocomplete="new-password">
+      </div>
+      {{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
+      <button type="submit" class="btn w-full">Set password and log in</button>
+    </form>
+  </div>
+</div>
+{{end}}{{end}}

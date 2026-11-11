@@ -1,0 +1,11 @@
+{{- if .Values.extraCACerts }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-auth-proxy.fullname" . }}-ca
+  labels:
+    {{- include "mcp-auth-proxy.labels" . | nindent 4 }}
+data:
+  extra-ca.crt: |
+{{ .Values.extraCACerts | indent 4 }}
+{{- end }}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // WebUI is the login + portal handler set.
@@ -13,11 +14,13 @@ type WebUI struct {
 	store    *store.Store
 	cfg      *config.Config
 	sessions *Sessions
+	pages    *view.Renderer
+	links    *pendingLinks
 	logger   *slog.Logger
 }
 
 // New builds the web UI.
-func New(st *store.Store, cfg *config.Config, signSecret []byte, logger *slog.Logger) *WebUI {
+func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Renderer, logger *slog.Logger) *WebUI {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -25,6 +28,8 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, logger *slog.Lo
 		store:    st,
 		cfg:      cfg,
 		sessions: NewSessions(signSecret, nil),
+		pages:    pages,
+		links:    &pendingLinks{m: map[string]pendingLink{}},
 		logger:   logger,
 	}
 }
@@ -45,6 +50,10 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin", ui.handleAdmin)
 	mux.HandleFunc("POST /admin/disable", ui.handleAdminDisable)
 	mux.HandleFunc("POST /admin/invite", ui.handleAdminInvite)
+	mux.HandleFunc("POST /portal/upstream/link", ui.handleUpstreamLink)
+	mux.HandleFunc("GET /portal/upstream/callback", ui.handleUpstreamCallback)
+	mux.HandleFunc("POST /portal/upstream/unlink", ui.handleUpstreamUnlink)
+	mux.HandleFunc("GET /portal/upstream/tools", ui.handleUpstreamTools)
 }
 
 // Sessions exposes the session verifier for the OAuth authorize gate.

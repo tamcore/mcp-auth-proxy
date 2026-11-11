@@ -41,15 +41,21 @@ type Publisher interface {
 // HTTPPublisher posts JSON to a ntfy server.
 type HTTPPublisher struct {
 	url    string
+	token  string
 	client *http.Client
+	logger *slog.Logger
 }
 
 // NewHTTPPublisher builds a publisher posting to url (e.g. https://ntfy.sh).
-func NewHTTPPublisher(url string, client *http.Client) *HTTPPublisher {
+// A non-empty token is sent as a Bearer access token.
+func NewHTTPPublisher(url, token string, client *http.Client, logger *slog.Logger) *HTTPPublisher {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &HTTPPublisher{url: url, client: client}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &HTTPPublisher{url: url, token: token, client: client, logger: logger}
 }
 
 // Publish POSTs the message as JSON to the ntfy server.
@@ -63,12 +69,18 @@ func (p *HTTPPublisher) Publish(ctx context.Context, m Message) error {
 		return fmt.Errorf("ntfy: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if p.token != "" {
+		req.Header.Set("Authorization", "Bearer "+p.token)
+	}
 	resp, err := p.client.Do(req)
 	if err != nil {
+		p.logger.Warn("ntfy publish failed", "url", p.url, "topic_set", m.Topic != "", "error", err)
 		return fmt.Errorf("ntfy: post: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
+		p.logger.Warn("ntfy publish rejected", "status", resp.StatusCode, "url", p.url,
+			"token_set", p.token != "")
 		return fmt.Errorf("ntfy: server returned %s", resp.Status)
 	}
 	return nil

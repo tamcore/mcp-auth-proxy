@@ -47,8 +47,8 @@ func newTestServer(t *testing.T) *httptest.Server {
 	m := metrics.New(nil)
 	g.OnChallenge = m.Challenge
 	pool := upstream.NewPool(cfg.Upstreams, st, nil, nil)
-	proxy := mcpserver.New(pool, g, m, nil)
-	srv, err := New(ctx, cfg, st, g, proxy, m, nil)
+	proxy := mcpserver.New(mcpserver.Options{Pool: pool, Store: st, Gate: g, Metrics: m, AuditEnabled: true})
+	srv, err := New(ctx, cfg, st, g, proxy, m, secret, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,18 +104,36 @@ func TestApproveBadSigIs403(t *testing.T) {
 	}
 }
 
-func TestAuthorizeRejectsBadRequests(t *testing.T) {
+func TestAuthorizeRequiresWebLogin(t *testing.T) {
 	ts := newTestServer(t)
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
 	for _, q := range []string{
 		"", "response_type=code", "response_type=code&client_id=nope&redirect_uri=https://x/cb",
 	} {
-		resp, err := http.Get(ts.URL + "/oauth/authorize?" + q)
+		resp, err := client.Get(ts.URL + "/oauth/authorize?" + q)
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("q=%q: want 400, got %d", q, resp.StatusCode)
+		if resp.StatusCode != http.StatusFound {
+			t.Fatalf("q=%q: want 302 to login, got %d", q, resp.StatusCode)
 		}
+		if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/login") {
+			t.Fatalf("q=%q: location %q", q, loc)
+		}
+	}
+}
+
+func TestLoginPageServed(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login page: %d", resp.StatusCode)
 	}
 }

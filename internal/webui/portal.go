@@ -1,0 +1,213 @@
+package webui
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/config"
+	"github.com/tamcore/mcp-auth-proxy/internal/identity"
+	"github.com/tamcore/mcp-auth-proxy/internal/store"
+)
+
+// allowedUpstreams returns the global config upstreams the user may use.
+func (ui *WebUI) allowedUpstreams(username string) []config.UpstreamConfig {
+	var out []config.UpstreamConfig
+	for _, u := range ui.cfg.Upstreams {
+		if u.Allows(username) {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// ownUpstreamNames returns the names of the user's database upstreams.
+func (ui *WebUI) ownUpstreams(r *http.Request, userID string) []*store.UserUpstream {
+	ups, err := ui.store.ListUserUpstreams(r.Context(), userID)
+	if err != nil {
+		ui.logger.Error("list user upstreams", "error", err)
+		return nil
+	}
+	return ups
+}
+
+func (ui *WebUI) ownKeys(r *http.Request, userID string) []*store.Key {
+	all, err := ui.store.ListKeys(r.Context())
+	if err != nil {
+		return nil
+	}
+	var out []*store.Key
+	for _, k := range all {
+		if k.UserID != nil && *k.UserID == userID {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+func (ui *WebUI) handlePortal(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	ui.renderPortal(w, r, user, "")
+}
+
+func (ui *WebUI) renderPortal(w http.ResponseWriter, r *http.Request, user *store.User, newToken string) {
+	globals := ui.allowedUpstreams(user.Username)
+	own := ui.ownUpstreams(r, user.ID)
+	keys := ui.ownKeys(r, user.ID)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(portalPage(user, globals, own, keys, ui.cfg, newToken)))
+}
+
+func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "unreadable form", http.StatusBadRequest)
+		return
+	}
+	label := strings.TrimSpace(r.PostForm.Get("label"))
+	if label == "" {
+		label = user.Username + " client"
+	}
+	names, err := ui.validateChosenUpstreams(r.Context(), user, r.PostForm["upstream"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		http.Error(w, "rng failure", http.StatusInternalServerError)
+		return
+	}
+	token := identity.StaticPrefix + hex.EncodeToString(raw)
+	id := make([]byte, 8)
+	_, _ = rand.Read(id)
+	key := &store.Key{
+		ID:         "k_" + hex.EncodeToString(id),
+		Kind:       store.KeyKindStatic,
+		Label:      label,
+		SecretHash: store.HashSecret(token),
+		Upstreams:  names,
+		TTLSeconds: int64(ui.cfg.SessionTTL / time.Second),
+		CreatedAt:  time.Now().UTC(),
+		UserID:     &user.ID,
+	}
+	if err := ui.store.CreateKey(r.Context(), key); err != nil {
+		ui.logger.Error("create key", "error", err)
+		http.Error(w, "could not create key", http.StatusInternalServerError)
+		return
+	}
+	ui.renderPortal(w, r, user, token)
+}
+
+// validateChosenUpstreams checks every chosen name is allowed for the user.
+func (ui *WebUI) validateChosenUpstreams(ctx context.Context, user *store.User, chosen []string) ([]string, error) {
+	allowed := map[string]bool{}
+	for _, u := range ui.allowedUpstreams(user.Username) {
+		allowed[u.Name] = true
+	}
+	for _, u := range ui.ownUpstreamsCtx(ctx, user.ID) {
+		allowed[u.Name] = true
+	}
+	var out []string
+	for _, n := range chosen {
+		if !allowed[n] {
+			return nil, fmt.Errorf("upstream %q is not available to you", n)
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+func (ui *WebUI) ownUpstreamsCtx(ctx context.Context, userID string) []*store.UserUpstream {
+	ups, err := ui.store.ListUserUpstreams(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	return ups
+}
+
+func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	id := r.PostForm.Get("id")
+	key, err := ui.store.KeyByID(r.Context(), id)
+	if err != nil || key.UserID == nil || *key.UserID != user.ID {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.PostForm.Get("name"))
+	url := strings.TrimSpace(r.PostForm.Get("url"))
+	command := strings.TrimSpace(r.PostForm.Get("command"))
+	if name == "" || (url == "") == (command == "") {
+		http.Error(w, "name and exactly one of url/command required", http.StatusBadRequest)
+		return
+	}
+	id := make([]byte, 8)
+	_, _ = rand.Read(id)
+	up := &store.UserUpstream{
+		ID:        "us_" + hex.EncodeToString(id),
+		UserID:    user.ID,
+		Name:      name,
+		URL:       url,
+		CreatedAt: time.Now().UTC(),
+	}
+	if command != "" {
+		up.Command = strings.Fields(command)
+	}
+	if err := ui.store.CreateUserUpstream(r.Context(), up); err != nil {
+		http.Error(w, "could not save upstream (name taken?)", http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (ui *WebUI) handleDeleteUpstream(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	if err := ui.store.DeleteUserUpstream(r.Context(), user.ID, r.PostForm.Get("id")); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func (ui *WebUI) handleAudit(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	entries, err := ui.store.ListAuditForUser(r.Context(), user.ID, 200)
+	if err != nil {
+		ui.logger.Error("list audit", "error", err)
+		http.Error(w, "could not load audit log", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(auditPage(user, entries, ui.cfg.Audit)))
+}

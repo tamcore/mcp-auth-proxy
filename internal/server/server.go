@@ -20,6 +20,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/metrics"
 	"github.com/tamcore/mcp-auth-proxy/internal/oauthserver"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/webui"
 )
 
 // contextKey carries the resolved key through the mux to the MCP handler.
@@ -33,15 +34,21 @@ type Server struct {
 	as       *oauthserver.Server
 	gate     *gate.Gate
 	metrics  *metrics.Metrics
+	webui    *webui.WebUI
 	logger   *slog.Logger
 }
 
 // New builds the root handler's dependencies.
 func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
-	proxy *mcpserver.Proxy, m *metrics.Metrics, logger *slog.Logger) (*Server, error) {
+	proxy *mcpserver.Proxy, m *metrics.Metrics, signSecret []byte, logger *slog.Logger) (*Server, error) {
 	as, err := oauthserver.New(ctx, st, cfg, logger)
 	if err != nil {
 		return nil, err
+	}
+	ui := webui.New(st, cfg, signSecret, logger)
+	as.CurrentUser = func(r *http.Request) *store.User {
+		u, _ := ui.Sessions().User(r, st)
+		return u
 	}
 	return &Server{
 		cfg:      cfg,
@@ -50,6 +57,7 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 		as:       as,
 		gate:     g,
 		metrics:  m,
+		webui:    ui,
 		logger:   logger,
 	}, nil
 }
@@ -60,7 +68,8 @@ func (s *Server) Handler() http.Handler {
 	mcpHandler := mcp.NewStreamableHTTPHandler(s.mcpGetServer, &mcp.StreamableHTTPOptions{Stateless: true})
 	mux.Handle("/mcp", s.authMiddleware(mcpHandler))
 	mux.Handle("/mcp/", s.authMiddleware(mcpHandler))
-	mux.HandleFunc("GET /oauth/authorize", s.as.HandleAuthorize)
+	s.webui.Register(mux)
+	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
 	mux.HandleFunc("POST /oauth/consent", s.as.HandleConsent)
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", s.handleApprove)
@@ -154,6 +163,19 @@ func (s *Server) handleSignButton(w http.ResponseWriter, r *http.Request, approv
 		http.Error(w, "not found", http.StatusNotFound)
 	}
 }
+
+// requireLogin redirects browser requests without a web session to /login.
+func (s *Server) requireLogin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := s.webui.Sessions().User(r, s.webuiStore()); !ok {
+			http.Redirect(w, r, "/login?next="+r.URL.Path+"?"+r.URL.RawQuery, http.StatusFound)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (s *Server) webuiStore() *store.Store { return s.webui.Store() }
 
 func unauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="mcp-auth-proxy"`)

@@ -20,6 +20,38 @@
     }
   };
 
+  const showTools = async (name) => {
+    const dialog = document.getElementById("tools-dialog");
+    const status = dialog.querySelector("[data-tools-status]");
+    const list = dialog.querySelector("[data-tools-list]");
+    dialog.querySelector("h2").textContent = `Tools of ${name}`;
+    status.textContent = "Loading…";
+    list.replaceChildren();
+    dialog.showModal();
+    try {
+      const res = await fetch(`/portal/upstream/tools?name=${encodeURIComponent(name)}`);
+      const body = await res.json();
+      if (!res.ok) {
+        status.textContent = body.error || "Could not load tools.";
+        return;
+      }
+      status.textContent = `${body.tools.length} tools`;
+      for (const t of body.tools) {
+        const li = document.createElement("li");
+        const code = document.createElement("code");
+        code.className = "mono";
+        code.textContent = t.name;
+        const p = document.createElement("p");
+        p.className = "muted mt-1";
+        p.textContent = t.description;
+        li.append(code, p);
+        list.append(li);
+      }
+    } catch {
+      status.textContent = "Could not load tools.";
+    }
+  };
+
   const flash = (el, text) => {
     const old = el.textContent;
     el.textContent = text;
@@ -36,6 +68,11 @@
         localStorage.setItem(KEY, set.dataset.themeSet);
       } catch {}
       apply();
+      return;
+    }
+    const tools = e.target.closest("[data-tools]");
+    if (tools) {
+      showTools(tools.dataset.tools);
       return;
     }
     const copy = e.target.closest("[data-copy]");

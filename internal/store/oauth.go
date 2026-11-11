@@ -194,3 +194,12 @@ ON CONFLICT (upstream, user_id) DO UPDATE SET access_token = excluded.access_tok
 	}
 	return nil
 }
+
+// DeleteUpstreamToken removes a user's token set for an upstream (unlink).
+func (s *Store) DeleteUpstreamToken(ctx context.Context, upstream, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM upstream_tokens WHERE upstream = ? AND user_id = ?`, upstream, userID)
+	if err != nil {
+		return fmt.Errorf("store: delete upstream token: %w", err)
+	}
+	return nil
+}

@@ -142,6 +142,18 @@ func (u *Upstream) httpClientWithAuth() *http.Client {
 }
 
 // Tools returns the upstream's tool list, connecting if needed.
+// Close ends the upstream session (and a stdio child process), if any.
+func (u *Upstream) Close() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.session == nil {
+		return nil
+	}
+	err := u.session.Close()
+	u.session, u.client, u.tools = nil, nil, nil
+	return err
+}
+
 func (u *Upstream) Tools(ctx context.Context) ([]mcp.Tool, error) {
 	if err := u.Connect(ctx); err != nil {
 		return nil, err

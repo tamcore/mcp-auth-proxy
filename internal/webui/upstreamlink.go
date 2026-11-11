@@ -71,7 +71,7 @@ func (ui *WebUI) handleUpstreamLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = r.ParseForm()
-	c, ok := ui.oauthUpstream(r.PostForm.Get("name"), user.Username)
+	c, ok := ui.oauthUpstream(r.PostForm.Get(nameField), user.Username)
 	if !ok {
 		http.Error(w, "unknown upstream or no oauth configured", http.StatusNotFound)
 		return

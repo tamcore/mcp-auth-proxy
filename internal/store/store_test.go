@@ -272,3 +272,28 @@ func TestSignSecretCreated0600(t *testing.T) {
 		t.Fatal("secret not stable across calls")
 	}
 }
+
+const (
+	delUp    = "garmin-del"
+	delUserA = "u_del_a"
+	delUserB = "u_del_b"
+)
+
+func TestDeleteUpstreamTokenOnlyForUser(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	for _, uid := range []string{delUserA, delUserB} {
+		if err := st.SaveUpstreamToken(ctx, &UpstreamToken{Upstream: delUp, UserID: uid, AccessToken: "at"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.DeleteUpstreamToken(ctx, delUp, delUserA); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, delUp, delUserA); err != ErrNotFound {
+		t.Fatalf("u_a token must be gone: %v", err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, delUp, delUserB); err != nil {
+		t.Fatalf("u_b token must stay: %v", err)
+	}
+}

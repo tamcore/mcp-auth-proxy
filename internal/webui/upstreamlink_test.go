@@ -109,7 +109,7 @@ func TestPortalShowsOwnLinkState(t *testing.T) {
 func postLink(t *testing.T, ts *httptest.Server, cookie *http.Cookie, name string) string {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/upstream/link",
-		strings.NewReader(url.Values{"name": {name}}.Encode()))
+		strings.NewReader(url.Values{nameField: {name}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
 	resp, err := noRedirectClient().Do(req)
@@ -149,7 +149,7 @@ func portalBody(t *testing.T, ts *httptest.Server, cookie *http.Cookie) string {
 func TestOwnUpstreamWithBearerToken(t *testing.T) {
 	st, ts := newLinkUI(t, "https://idp/token")
 	bob := login(t, ts, testBob, linkPw)
-	form := url.Values{"name": {"ha"}, "url": {"https://ha.example/api/mcp"}, "bearer": {"llat_secret"}}
+	form := url.Values{nameField: {"ha"}, "url": {"https://ha.example/api/mcp"}, "bearer": {"llat_secret"}}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/upstream", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(bob)

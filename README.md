@@ -13,6 +13,27 @@ TTL (default 8h, per-key override). The ntfy notification also carries
 **Approve / Deny** buttons (HMAC-signed URLs) as an alternative to typing the
 code.
 
+## Multi-user
+
+The instance is multi-user. Usernames are declared in the config (`users:`);
+admins only via `admins:`. A configured user missing from the database is
+created on start with a **single-use invite link** (`{base_url}/invite/{token}`,
+logged once) through which they set their own password — no passwords are
+handed over in plaintext.
+
+At `{base_url}/login` a user logs in with username+password only and reaches a
+self-contained portal (inline CSS, no external assets) to: create API keys for
+globally configured MCP servers available to them, run the OAuth flow for
+registered clients, add their **own** MCP servers (stored in the database,
+visible only to them), and view their **audit log** — which client called which
+tool with which parameters (responses optional via `audit.log_responses`,
+entries garbage-collected after `audit.retention`, default 30 days).
+
+Config upstreams may be global or restricted via `users: [alice]`; a user's own
+upstreams always win over same-named global ones. Admins (`/admin`) can
+temporarily disable users (their keys stop working immediately) and mint new
+invite links.
+
 ## Security model: identity is never authorization
 
 OAuth 2.x runs on both sides, but it only proves *who* is calling:

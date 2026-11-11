@@ -27,13 +27,30 @@ ntfy:
   topic: my-private-topic   # required when enabled
   enabled: false            # when false, notifications are only logged
 
+# Users of the multi-user instance. A user missing from the database is created
+# on start with a single-use invite link (logged once) through which they set
+# their own password. `admins` is the only place the admin role is toggled;
+# admins can disable users and mint new invite links in the web UI (/admin).
+users: [alice, bob]
+admins: [alice]
+
+# Audit log: every proxied tool call is recorded per user (tool, arguments, and
+# optionally the response). Entries older than `retention` are garbage
+# collected on serve start. Default retention is 30 days.
+audit:
+  enabled: true
+  log_responses: false
+  retention: 720h
+
 # Upstream MCP servers. Each has exactly one of `url` (Streamable HTTP) or
-# `command` (stdio). Tools are exposed to clients as {name}__{tool}.
+# `command` (stdio). Tools are exposed to clients as {name}__{tool}. `users`
+# restricts the upstream to those users; omit it for a global upstream.
 upstreams:
   - name: echo
     command: ["mcp-auth-proxy", "dev-echo"]   # demo upstream
   # - name: remote
   #   url: https://mcp.example.com/mcp
+  #   users: [alice]        # omit for global (all users)
   #   headers:
   #     X-Custom: value
   #   oauth:               # optional: `upstream link remote` once, then tokens

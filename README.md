@@ -86,6 +86,10 @@ ntfy:
   enabled: true
 ```
 
+If the server requires auth on the topic, set an access token via
+`MCP_PROXY_NTFY_TOKEN=tk_…` (sent as `Authorization: Bearer`). A rejected
+publish is logged at WARN with the HTTP status.
+
 With `enabled: false` the code and the Approve/Deny URLs are only logged, which
 is handy for local testing.
 

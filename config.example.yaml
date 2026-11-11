@@ -28,6 +28,7 @@ otp:
 ntfy:
   url: https://ntfy.sh
   topic: my-private-topic   # required when enabled
+  # token: tk_…             # optional access token; prefer MCP_PROXY_NTFY_TOKEN
   enabled: false            # when false, notifications are only logged
 
 # Users of the multi-user instance. A user missing from the database is created

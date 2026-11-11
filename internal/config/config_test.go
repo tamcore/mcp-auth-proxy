@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,6 +58,22 @@ func TestEnvOverride(t *testing.T) {
 	}
 	if cfg.SessionTTL != time.Hour || cfg.OTP.Digits != 6 {
 		t.Fatalf("env override ignored: ttl=%v digits=%d", cfg.SessionTTL, cfg.OTP.Digits)
+	}
+}
+
+func TestNtfyTokenFromEnvAndHidden(t *testing.T) {
+	t.Setenv("MCP_PROXY_NTFY_TOKEN", "tk_secret")
+	t.Setenv("MCP_PROXY_NTFY_TOPIC", "topic_secret")
+	cfg, err := Load(writeCfg(t, minimal))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Ntfy.Token != "tk_secret" {
+		t.Fatalf("ntfy token = %q", cfg.Ntfy.Token)
+	}
+	s := fmt.Sprintf("%v %+v", cfg.Ntfy, cfg.Ntfy)
+	if strings.Contains(s, "tk_secret") || strings.Contains(s, "topic_secret") {
+		t.Fatalf("ntfy credentials printable: %s", s)
 	}
 }
 

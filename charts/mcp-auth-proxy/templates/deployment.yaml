@@ -66,14 +66,24 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}
-            {{- if and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
-            - secretRef:
-                name: {{ .Values.ntfy.existingSecret }}
-            {{- end }}
             {{- if and .Values.ntfy.enabled (not .Values.ntfy.existingSecret) }}
             - secretRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}-ntfy
             {{- end }}
+          {{- if and .Values.ntfy.enabled .Values.ntfy.existingSecret }}
+          env:
+            - name: MCP_PROXY_NTFY_TOPIC
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ntfy.existingSecret }}
+                  key: {{ .Values.ntfy.existingSecretKey }}
+            - name: MCP_PROXY_NTFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ntfy.existingSecret }}
+                  key: {{ .Values.ntfy.existingSecretTokenKey }}
+                  optional: true
+          {{- end }}
           volumeMounts:
             - name: config
               mountPath: /etc/mcp-auth-proxy

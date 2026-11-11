@@ -65,8 +65,13 @@ ntfy:
   enabled: false
   url: https://ntfy.sh
   topic: ""
+  # Optional access token (tk_…) for a server that requires auth on the topic.
+  token: ""
+  # Use an existing Secret instead: topic under existingSecretKey, optional
+  # token under existingSecretTokenKey.
   existingSecret: ""
   existingSecretKey: MCP_PROXY_NTFY_TOPIC
+  existingSecretTokenKey: MCP_PROXY_NTFY_TOKEN
 
 persistence:
   enabled: true

@@ -33,7 +33,7 @@ jobs:
             --set 'config.upstreams[0].name=echo' \
             --set 'config.upstreams[0].command[0]=mcp-auth-proxy' \
             --set 'config.upstreams[0].command[1]=dev-echo' \
-            --set ntfy.enabled=true --set ntfy.topic=testtopic \
+            --set ntfy.enabled=true --set ntfy.topic=testtopic --set ntfy.token=tk_test \
             --set metrics.serviceMonitor.enabled=true \
             --set ingress.enabled=true \
             --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw' \

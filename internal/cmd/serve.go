@@ -77,7 +77,7 @@ func runServe(cmd *cobra.Command) error {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	var pub ntfy.Publisher
 	if cfg.Ntfy.Enabled {
-		pub = ntfy.NewHTTPPublisher(cfg.Ntfy.URL, httpClient)
+		pub = ntfy.NewHTTPPublisher(cfg.Ntfy.URL, cfg.Ntfy.Token, httpClient, logger)
 	} else {
 		pub = ntfy.NewLogPublisher(logger)
 	}

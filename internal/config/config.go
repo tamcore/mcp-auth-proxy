@@ -64,7 +64,13 @@ type OTPConfig struct {
 type NtfyConfig struct {
 	URL     string
 	Topic   string
+	Token   string
 	Enabled bool
+}
+
+// String hides the topic and token, which are credentials.
+func (n NtfyConfig) String() string {
+	return fmt.Sprintf("{URL:%s Enabled:%t}", n.URL, n.Enabled)
 }
 
 // AuditConfig holds the audit log settings. Retention is the garbage-collection
@@ -158,6 +164,7 @@ func Load(path string) (*Config, error) {
 		Ntfy: NtfyConfig{
 			URL:     v.GetString("ntfy.url"),
 			Topic:   v.GetString("ntfy.topic"),
+			Token:   v.GetString("ntfy.token"),
 			Enabled: v.GetBool("ntfy.enabled"),
 		},
 		Audit: AuditConfig{

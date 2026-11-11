@@ -76,6 +76,12 @@ func (ui *WebUI) renderPortalStatus(w http.ResponseWriter, r *http.Request, user
 	}
 	data := portalData(globals, ui.ownUpstreams(r, user.ID), ui.ownKeys(r, user.ID), ui.cfg, newToken, linked)
 	data.Error = errMsg
+	now := time.Now().UTC()
+	for i := range data.Keys {
+		if sess, err := ui.store.GetSession(r.Context(), data.Keys[i].ID, now); err == nil {
+			data.Keys[i].AuthorizedUntil = &sess.ExpiresAt
+		}
+	}
 	ui.pages.Render(w, status, "portal", page("mcp-auth-proxy", user, data))
 }
 
@@ -164,6 +170,23 @@ func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// handleDeleteKey removes one of the user's revoked keys; its audit history
+// stays.
+func (ui *WebUI) handleDeleteKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	id := r.PostForm.Get("id")
+	if err := ui.store.DeleteRevokedKey(r.Context(), id, user.ID); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	ui.logger.Info("key removed", "key", id, "user", user.Username)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // handleKeyUpstreams replaces the MCP servers of one of the user's keys.

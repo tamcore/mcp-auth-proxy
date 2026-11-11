@@ -61,3 +61,57 @@ func TestEditKeyUpstreams(t *testing.T) {
 		t.Fatalf("revoked key: want 404, got %d", code)
 	}
 }
+
+func TestRemoveRevokedKeyAndAuthzExpiry(t *testing.T) {
+	st, ts := newLinkUI(t, "https://idp/token")
+	ctx := context.Background()
+	uid := linkUserID
+	now := time.Now().UTC()
+	key := &store.Key{ID: "k_rm", Kind: store.KeyKindStatic, Label: "remove-me", SecretHash: "h_rm",
+		Upstreams: []string{testEcho}, TTLSeconds: 60, CreatedAt: now, UserID: &uid}
+	if err := st.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	bob := login(t, ts, testBob, linkPw)
+	if !strings.Contains(portalBody(t, ts, bob), "not authorized") {
+		t.Fatal("key without session must show not authorized")
+	}
+	until := now.Add(2 * time.Hour)
+	sess := &store.Session{KeyID: key.ID, CreatedAt: now, ExpiresAt: until, Origin: "otp"}
+	if err := st.UpsertSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(portalBody(t, ts, bob), "authorized until "+until.Format("2006-01-02 15:04 UTC")) {
+		t.Fatal("key with session must show when the authorization expires")
+	}
+	remove := func(cookie *http.Cookie) int {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/key/delete",
+			strings.NewReader(url.Values{"id": {key.ID}}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookie)
+		resp, err := noRedirectClient().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := remove(bob); code != http.StatusNotFound {
+		t.Fatalf("active key removal: want 404, got %d", code)
+	}
+	if err := st.RevokeKey(ctx, key.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(portalBody(t, ts, bob), `action="/portal/key/delete"`) {
+		t.Fatal("revoked key must offer Remove")
+	}
+	if code := remove(login(t, ts, testAlice, linkPw)); code != http.StatusNotFound {
+		t.Fatalf("foreign key removal: want 404, got %d", code)
+	}
+	if code := remove(bob); code != http.StatusSeeOther {
+		t.Fatalf("revoked key removal: want 303, got %d", code)
+	}
+	if _, err := st.KeyByID(ctx, key.ID); err != store.ErrNotFound {
+		t.Fatalf("key must be gone: %v", err)
+	}
+}

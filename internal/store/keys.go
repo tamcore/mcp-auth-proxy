@@ -190,3 +190,34 @@ func optionalTime(raw any) (*time.Time, error) {
 	}
 	return &t, nil
 }
+
+// DeleteRevokedKey removes a revoked key the user owns, with its sessions,
+// challenges and access tokens. Audit entries stay. Active or foreign keys
+// return ErrNotFound.
+func (s *Store) DeleteRevokedKey(ctx context.Context, id, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var n int
+	err = tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM keys WHERE id = ? AND user_id = ? AND revoked_at IS NOT NULL`, id, userID).Scan(&n)
+	if err != nil {
+		return fmt.Errorf("store: check key: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	for _, q := range []string{
+		`DELETE FROM sessions WHERE key_id = ?`,
+		`DELETE FROM challenges WHERE key_id = ?`,
+		`DELETE FROM access_tokens WHERE key_id = ?`,
+		`DELETE FROM keys WHERE id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return fmt.Errorf("store: delete key: %w", err)
+		}
+	}
+	return tx.Commit()
+}

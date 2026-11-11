@@ -38,6 +38,8 @@ type Key struct {
 	Revoked     bool
 	LastUsed    *time.Time
 	LastSuccess *time.Time
+	// AuthorizedUntil is the end of the current OTP session, nil if none.
+	AuthorizedUntil *time.Time
 }
 
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.

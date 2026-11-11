@@ -382,3 +382,45 @@ func assertKeyActivity(t *testing.T, st *Store, id string, now time.Time) {
 		t.Fatalf("list keys must carry activity: %+v %v", all, err)
 	}
 }
+
+func TestDeleteRevokedKeyKeepsAudit(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	owner := "u_delowner"
+	if err := st.CreateUser(ctx, &User{ID: owner, Username: "delowner", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	k := &Key{ID: "k_del", Kind: KeyKindStatic, Label: "gone", SecretHash: "h_del", Upstreams: []string{},
+		TTLSeconds: 60, CreatedAt: now, UserID: &owner}
+	if err := st.CreateKey(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	sess := &Session{KeyID: k.ID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), Origin: "otp"}
+	if err := st.UpsertSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AppendAudit(ctx, &AuditEntry{ID: "a_del", UserID: owner, KeyID: k.ID, KeyLabel: k.Label,
+		ToolName: "t", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, owner); err != ErrNotFound {
+		t.Fatalf("active key must not be deletable: %v", err)
+	}
+	if err := st.RevokeKey(ctx, k.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, "u_someone"); err != ErrNotFound {
+		t.Fatalf("foreign key must not be deletable: %v", err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, owner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.KeyByID(ctx, k.ID); err != ErrNotFound {
+		t.Fatalf("key must be gone: %v", err)
+	}
+	entries, err := st.ListAuditForUser(ctx, owner, 10)
+	if err != nil || len(entries) != 1 || entries[0].KeyLabel != "gone" {
+		t.Fatalf("audit history must survive key deletion: %+v %v", entries, err)
+	}
+}

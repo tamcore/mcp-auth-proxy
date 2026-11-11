@@ -45,10 +45,19 @@ type Pool struct {
 func NewPool(cfgs []config.UpstreamConfig, st *store.Store, httpc *http.Client, logger *slog.Logger) *Pool {
 	p := &Pool{ups: map[string]*Upstream{}}
 	for _, c := range cfgs {
-		p.ups[c.Name] = &Upstream{cfg: c, store: st, httpc: httpc, logger: logger}
+		p.ups[c.Name] = NewFromConfig(c, st, httpc, logger)
 		p.order = append(p.order, c.Name)
 	}
 	return p
+}
+
+// NewFromConfig builds a single Upstream from a config (also used for
+// database-defined per-user upstreams).
+func NewFromConfig(c config.UpstreamConfig, st *store.Store, httpc *http.Client, logger *slog.Logger) *Upstream {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Upstream{cfg: c, store: st, httpc: httpc, logger: logger}
 }
 
 // Names returns the upstream names in config order.

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // handleInvitePage serves the set-your-password form for a valid invite token.
@@ -14,8 +15,7 @@ func (ui *WebUI) handleInvitePage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invite link is invalid, expired, or already used", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(page("set your password", inviteBody(token, ""))))
+	ui.renderInvite(w, http.StatusOK, token, "")
 }
 
 // handleInviteSet consumes the invite, sets the password, and logs the user in.
@@ -28,16 +28,11 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 	pw := r.PostForm.Get("password")
 	pw2 := r.PostForm.Get("password2")
 	if len(pw) < 8 {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest)
-		msg := `<p class="err">Password must be at least 8 characters.</p>`
-		_, _ = w.Write([]byte(page("set your password", inviteBody(token, msg))))
+		ui.renderInvite(w, http.StatusBadRequest, token, "Password must be at least 8 characters.")
 		return
 	}
 	if pw != pw2 {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(page("set your password", inviteBody(token, `<p class="err">Passwords do not match.</p>`))))
+		ui.renderInvite(w, http.StatusBadRequest, token, "Passwords do not match.")
 		return
 	}
 	user, err := ui.store.ConsumeInvite(r.Context(), token, time.Now().UTC())
@@ -71,10 +66,6 @@ func (ui *WebUI) validInvite(r *http.Request, token string) bool {
 	return perr == nil && time.Now().UTC().Before(exp)
 }
 
-func inviteBody(token, msg string) string {
-	return `<h1>Set your password</h1>
-<div class="card" style="max-width:22rem"><form method="post" action="/invite/` + esc(token) + `">
-<label>Password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
-<label>Repeat <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
-` + msg + `<button type="submit">Set password and log in</button></form></div>`
+func (ui *WebUI) renderInvite(w http.ResponseWriter, status int, token, errMsg string) {
+	ui.pages.Render(w, status, "invite", page("Set your password", nil, view.InviteData{Token: token, Error: errMsg}))
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 const (
@@ -48,7 +49,7 @@ func newTestServer(t *testing.T) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	s, err := New(context.Background(), st, testConfig(), nil)
+	s, err := New(context.Background(), st, testConfig(), ui.New(nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

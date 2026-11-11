@@ -13,6 +13,7 @@ import (
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 const (
@@ -51,7 +52,7 @@ func newTestUI(t *testing.T) (*store.Store, *httptest.Server) {
 		Audit: config.AuditConfig{Enabled: true, Retention: 720 * time.Hour},
 		OAuth: config.OAuthConfig{TokenTTL: time.Hour, AuthorizeCodeTTL: 10 * time.Minute},
 	}
-	ui := New(st, cfg, secret, nil)
+	ui := New(st, cfg, secret, view.New(nil), nil)
 	mux := http.NewServeMux()
 	ui.Register(mux)
 	ts := httptest.NewServer(mux)

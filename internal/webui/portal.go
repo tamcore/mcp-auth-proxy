@@ -12,6 +12,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // allowedUpstreams returns the global config upstreams the user may use.
@@ -61,8 +62,8 @@ func (ui *WebUI) renderPortal(w http.ResponseWriter, r *http.Request, user *stor
 	globals := ui.allowedUpstreams(user.Username)
 	own := ui.ownUpstreams(r, user.ID)
 	keys := ui.ownKeys(r, user.ID)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(portalPage(user, globals, own, keys, ui.cfg, newToken)))
+	data := portalData(globals, own, keys, ui.cfg, newToken)
+	ui.pages.Render(w, http.StatusOK, "portal", page("mcp-auth-proxy", user, data))
 }
 
 func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
@@ -208,6 +209,9 @@ func (ui *WebUI) handleAudit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not load audit log", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(auditPage(user, entries, ui.cfg.Audit)))
+	ui.pages.Render(w, http.StatusOK, "audit", page("audit log", user, view.AuditData{
+		Retention: ui.cfg.Audit.Retention.String(),
+		Responses: responsesLabel(ui.cfg.Audit),
+		Entries:   entries,
+	}))
 }

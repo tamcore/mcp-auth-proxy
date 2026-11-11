@@ -119,7 +119,21 @@ func TestHTTPPublisherWarnsOnRejectedToken(t *testing.T) {
 	if !strings.Contains(buf.String(), `"level":"WARN"`) || !strings.Contains(buf.String(), `"status":403`) {
 		t.Fatalf("want WARN log with status, got %s", buf.String())
 	}
-	if strings.Contains(buf.String(), "tk_bad") {
-		t.Fatal("token must never be logged")
+	if strings.Contains(buf.String(), "tk_bad") || strings.Contains(buf.String(), `"t"`) {
+		t.Fatal("token and topic must never be logged")
+	}
+}
+
+func TestHTTPPublisherWarnsOnTransportError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	if err := NewHTTPPublisher(url, "tk_x", nil, logger).Publish(context.Background(), Message{Topic: "t"}); err == nil {
+		t.Fatal("want error for unreachable server")
+	}
+	if !strings.Contains(buf.String(), `"level":"WARN"`) || !strings.Contains(buf.String(), "ntfy publish failed") {
+		t.Fatalf("want WARN on transport error, got %s", buf.String())
 	}
 }

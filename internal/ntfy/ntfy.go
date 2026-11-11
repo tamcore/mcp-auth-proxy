@@ -74,11 +74,12 @@ func (p *HTTPPublisher) Publish(ctx context.Context, m Message) error {
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
+		p.logger.Warn("ntfy publish failed", "url", p.url, "topic_set", m.Topic != "", "error", err)
 		return fmt.Errorf("ntfy: post: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
-		p.logger.Warn("ntfy publish rejected", "status", resp.StatusCode, "topic", m.Topic,
+		p.logger.Warn("ntfy publish rejected", "status", resp.StatusCode, "url", p.url,
 			"token_set", p.token != "")
 		return fmt.Errorf("ntfy: server returned %s", resp.Status)
 	}

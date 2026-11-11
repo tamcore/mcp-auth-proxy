@@ -2,8 +2,6 @@ package webui
 
 import (
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
@@ -18,17 +16,7 @@ func (ui *WebUI) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	if next == "" {
 		next = "/"
 	}
-	invites, err := ui.store.PendingInvites(r.Context(), time.Now().UTC())
-	if err != nil {
-		ui.logger.Error("pending invites", "error", err)
-		invites = nil
-	}
-	base := strings.TrimRight(ui.cfg.BaseURL, "/")
-	data := view.LoginData{Next: next}
-	for _, inv := range invites {
-		data.Invites = append(data.Invites, view.Invite{Username: inv.Username, Link: base + "/invite/" + inv.Token})
-	}
-	ui.pages.Render(w, http.StatusOK, "login", page("Log in", nil, data))
+	ui.pages.Render(w, http.StatusOK, "login", page("Log in", nil, view.LoginData{Next: next}))
 }
 
 func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {

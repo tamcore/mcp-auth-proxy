@@ -18,20 +18,4 @@
     </form>
   </div>
 </div>
-{{if .Invites}}
-<section class="card mx-auto max-w-2xl" aria-labelledby="invites">
-  <h2 id="invites" class="card-title">Pending invites</h2>
-  <p class="muted mb-4">Users who have not set a password yet. The link logs them in and lets them choose one.</p>
-  <ul class="space-y-3">
-    {{range .Invites}}
-    <li class="flex flex-wrap items-center gap-2">
-      <strong>{{.Username}}</strong>
-      <a href="{{.Link}}">set password</a>
-      <code class="mono min-w-0 flex-1">{{.Link}}</code>
-      <button type="button" class="btn-ghost" data-copy="{{.Link}}">Copy</button>
-    </li>
-    {{end}}
-  </ul>
-</section>
-{{end}}
 {{end}}{{end}}

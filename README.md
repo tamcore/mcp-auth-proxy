@@ -18,8 +18,10 @@ code.
 The instance is multi-user. Usernames are declared in the config (`users:`);
 admins only via `admins:`. A configured user missing from the database is
 created on start with a **single-use invite link** (`{base_url}/invite/{token}`,
-logged once) through which they set their own password — no passwords are
-handed over in plaintext.
+logged on every start until used) through which they set their own password —
+no passwords are handed over in plaintext. Only the newest link per user is
+valid, invite tokens are stored as hashes only, and links never appear in the
+web UI except once, right after an admin mints one.
 
 At `{base_url}/login` a user logs in with username+password only and reaches a
 self-contained portal (same-origin CSS and JS only, no external assets; light,
@@ -32,8 +34,8 @@ entries garbage-collected after `audit.retention`, default 30 days).
 
 Config upstreams may be global or restricted via `users: [alice]`; a user's own
 upstreams always win over same-named global ones. Admins (`/admin`) can
-temporarily disable users (their keys stop working immediately) and mint new
-invite links.
+temporarily disable users (their keys stop working immediately), see which
+users still have an invite pending, and mint new invite links.
 
 ## Security model: identity is never authorization
 

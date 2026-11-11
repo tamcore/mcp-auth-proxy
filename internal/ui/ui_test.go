@@ -29,7 +29,7 @@ func TestEveryPageRendersSelfContained(t *testing.T) {
 	alice := &User{Name: testUser}
 	admin := &User{Name: testUser, Admin: true}
 	pages := map[string]Page{
-		"login":  {Data: LoginData{Next: "/", Invites: []Invite{{Username: testUser, Link: "http://p/invite/abc"}}}},
+		"login":  {Data: LoginData{Next: "/"}},
 		"invite": {Data: InviteData{Token: "abc", Error: "bad"}},
 		"portal": {User: alice, Data: PortalData{
 			NewToken: "mak_x", MCPURL: "http://p/mcp/mak_x",

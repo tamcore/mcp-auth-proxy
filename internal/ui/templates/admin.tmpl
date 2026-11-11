@@ -27,7 +27,7 @@
         <tr data-testid="user-row">
           <td class="px-5 py-3 font-medium sm:px-6">{{.Username}}</td>
           <td class="px-5 py-3">{{if .Admin}}<span class="badge-accent">admin</span>{{else}}<span class="badge">user</span>{{end}}</td>
-          <td class="px-5 py-3">{{if .Disabled}}<span class="badge">disabled</span>{{else}}<span class="badge-accent">active</span>{{end}}</td>
+          <td class="px-5 py-3">{{if .Disabled}}<span class="badge">disabled</span>{{else if not .PasswordHash}}<span class="badge">invite pending</span>{{else}}<span class="badge-accent">active</span>{{end}}</td>
           <td class="px-5 py-3">
             <div class="flex flex-wrap justify-end gap-2">
               <form method="post" action="/admin/disable">

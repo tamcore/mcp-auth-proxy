@@ -2,17 +2,10 @@ package ui
 
 import "github.com/tamcore/mcp-auth-proxy/internal/store"
 
-// Invite is a pending invite shown on the login page.
-type Invite struct {
-	Username string
-	Link     string
-}
-
 // LoginData feeds login.tmpl.
 type LoginData struct {
-	Next    string
-	Error   string
-	Invites []Invite
+	Next  string
+	Error string
 }
 
 // InviteData feeds invite.tmpl.

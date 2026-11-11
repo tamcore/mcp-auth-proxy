@@ -28,7 +28,7 @@ ntfy:
   enabled: false            # when false, notifications are only logged
 
 # Users of the multi-user instance. A user missing from the database is created
-# on start with a single-use invite link (logged once) through which they set
+# on start with a single-use invite link (logged each start until used) to set
 # their own password. `admins` is the only place the admin role is toggled;
 # admins can disable users and mint new invite links in the web UI (/admin).
 users: [alice, bob]

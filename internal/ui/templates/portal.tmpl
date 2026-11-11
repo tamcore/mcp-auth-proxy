@@ -94,8 +94,8 @@
     </li>
     {{end}}
   </ul>
-  <form method="post" action="/portal/upstream" class="mt-6 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-3 dark:border-slate-700">
-    <h3 class="text-sm font-semibold sm:col-span-3">Add your own server</h3>
+  <form method="post" action="/portal/upstream" class="mt-6 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2 dark:border-slate-700">
+    <h3 class="text-sm font-semibold sm:col-span-2">Add your own server</h3>
     <div>
       <label class="field-label" for="up-name">Name</label>
       <input class="field" id="up-name" type="text" name="name" required maxlength="40">
@@ -105,10 +105,14 @@
       <input class="field" id="up-url" type="url" name="url" placeholder="https://…/mcp">
     </div>
     <div>
+      <label class="field-label" for="up-bearer">Bearer token <span class="muted">(optional, for URL)</span></label>
+      <input class="field" id="up-bearer" type="password" name="bearer" autocomplete="off" placeholder="e.g. a long-lived access token">
+    </div>
+    <div>
       <label class="field-label" for="up-cmd">or stdio command</label>
       <input class="field" id="up-cmd" type="text" name="command" placeholder="binary arg…">
     </div>
-    <div class="sm:col-span-3"><button type="submit" class="btn">Add server</button></div>
+    <div class="sm:col-span-2"><button type="submit" class="btn">Add server</button></div>
   </form>
 </section>
 

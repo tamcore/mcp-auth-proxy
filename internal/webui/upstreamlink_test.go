@@ -145,3 +145,24 @@ func portalBody(t *testing.T, ts *httptest.Server, cookie *http.Cookie) string {
 	b, _ := io.ReadAll(resp.Body)
 	return string(b)
 }
+
+func TestOwnUpstreamWithBearerToken(t *testing.T) {
+	st, ts := newLinkUI(t, "https://idp/token")
+	bob := login(t, ts, testBob, linkPw)
+	form := url.Values{"name": {"ha"}, "url": {"https://ha.example/api/mcp"}, "bearer": {"llat_secret"}}
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/upstream", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(bob)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	ups, err := st.ListUserUpstreams(context.Background(), linkUserID)
+	if err != nil || len(ups) != 1 || ups[0].Headers["Authorization"] != "Bearer llat_secret" {
+		t.Fatalf("bearer not stored as Authorization header: %+v %v", ups, err)
+	}
+	if strings.Contains(portalBody(t, ts, bob), "llat_secret") {
+		t.Fatal("token must never be shown again")
+	}
+}

@@ -175,8 +175,13 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	url := strings.TrimSpace(r.PostForm.Get("url"))
 	command := strings.TrimSpace(r.PostForm.Get("command"))
+	bearer := strings.TrimSpace(r.PostForm.Get("bearer"))
 	if name == "" || (url == "") == (command == "") {
 		http.Error(w, "name and exactly one of url/command required", http.StatusBadRequest)
+		return
+	}
+	if bearer != "" && url == "" {
+		http.Error(w, "a bearer token needs a url", http.StatusBadRequest)
 		return
 	}
 	id := make([]byte, 8)
@@ -190,6 +195,9 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	}
 	if command != "" {
 		up.Command = strings.Fields(command)
+	}
+	if bearer != "" {
+		up.Headers = map[string]string{"Authorization": "Bearer " + bearer}
 	}
 	if err := ui.store.CreateUserUpstream(r.Context(), up); err != nil {
 		http.Error(w, "could not save upstream (name taken?)", http.StatusBadRequest)

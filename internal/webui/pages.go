@@ -58,7 +58,11 @@ func portalPage(user *store.User, globals []config.UpstreamConfig, own []*store.
 	var b strings.Builder
 	b.WriteString(`<h1>mcp-auth-proxy</h1>
 <div class="card row"><span>Logged in as <strong>` + esc(user.Username) + `</strong></span>
-<a href="/portal/audit">audit log</a>{{if .}} · <a href="/admin">admin</a>{{end}}
+<a href="/portal/audit">audit log</a>`)
+	if user.Admin {
+		b.WriteString(` · <a href="/admin">admin</a>`)
+	}
+	b.WriteString(`
 <form class="inline" method="post" action="/logout"><button class="ghost">Log out</button></form></div>`)
 	if newToken != "" {
 		b.WriteString(`<div class="card"><strong>New key — token shown once:</strong><br><code>` + esc(newToken) +

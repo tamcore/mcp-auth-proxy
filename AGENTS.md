@@ -59,8 +59,10 @@ charts/mcp-auth-proxy/   Helm chart (single-replica stateful deployment)
 
 - All real code under `internal/`; main packages are thin. Files < 400 lines,
   functions < 50 lines, gocyclo <= 15.
-- slog JSON to stderr only; stdout carries only MCP frames in stdio contexts and
-  machine-readable command output (e.g. `key create --json`).
+- slog JSON. `serve` logs to stdout (service log: access log, audit lines);
+  every other command logs to stderr, because there stdout carries only MCP
+  frames in stdio contexts and machine-readable output (e.g. `key create --json`).
+  Access logs redact credential path segments and drop the query string.
 - Secrets are unprintable: never in String(), MarshalJSON, errors, or logs. Only
   sha256-hex hashes are stored or logged. Tokens are shown exactly once at
   creation.

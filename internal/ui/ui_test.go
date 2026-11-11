@@ -32,7 +32,7 @@ func TestEveryPageRendersSelfContained(t *testing.T) {
 		"login":  {Data: LoginData{Next: "/"}},
 		"invite": {Data: InviteData{Token: "abc", Error: "bad"}},
 		"portal": {User: alice, Data: PortalData{
-			NewToken: "mak_x", MCPURL: "http://p/mcp/mak_x",
+			NewToken: "mak_x", MCPEndpoint: "http://p/mcp", MCPURL: "http://p/mcp/mak_x",
 			Servers: []Server{{Name: "echo", Kind: "own", ID: "us_1"}},
 			Keys:    []Key{{ID: "k_1", Label: "l"}},
 		}},

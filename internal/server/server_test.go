@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -25,6 +27,11 @@ func newTestServer(t *testing.T) *httptest.Server {
 }
 
 func newTestSrv(t *testing.T) *Server {
+	t.Helper()
+	return newTestSrvLogged(t, nil)
+}
+
+func newTestSrvLogged(t *testing.T, logger *slog.Logger) *Server {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -55,7 +62,7 @@ func newTestSrv(t *testing.T) *Server {
 	g.OnChallenge = m.Challenge
 	pool := upstream.NewPool(cfg.Upstreams, st, nil, nil)
 	proxy := mcpserver.New(mcpserver.Options{Pool: pool, Store: st, Gate: g, Metrics: m, AuditEnabled: true})
-	srv, err := New(ctx, cfg, st, g, proxy, m, secret, nil)
+	srv, err := New(ctx, cfg, st, g, proxy, m, secret, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,5 +187,51 @@ func TestApproveDenyAllowCrossOriginFromNtfyWebApp(t *testing.T) {
 		if resp.StatusCode != http.StatusForbidden || resp.Header.Get("Access-Control-Allow-Origin") != "*" {
 			t.Fatalf("%s: bad sig must stay 403 and carry CORS: %d", path, resp.StatusCode)
 		}
+	}
+}
+
+func TestAccessLogRedactsSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	srv := newTestSrvLogged(t, slog.New(slog.NewJSONHandler(&buf, nil)))
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	for _, path := range []string{"/mcp/mak_supersecret", "/invite/invsecret", "/approve/c1?sig=sigsecret"} {
+		_ = statusOf(t, ts.URL+path)
+	}
+	logs := buf.String()
+	for _, secret := range []string{"mak_supersecret", "invsecret", "sigsecret"} {
+		if strings.Contains(logs, secret) {
+			t.Fatalf("access log leaks %q: %s", secret, logs)
+		}
+	}
+	for _, want := range []string{`"msg":"http request"`, `"path":"/mcp/[redacted]"`, `"path":"/invite/[redacted]"`,
+		`"path":"/approve/c1"`, `"status":401`} {
+		if !strings.Contains(logs, want) {
+			t.Fatalf("access log missing %s: %s", want, logs)
+		}
+	}
+}
+
+func TestAuthenticatedRequestMarksKeyUsed(t *testing.T) {
+	srv := newTestSrv(t)
+	ctx := context.Background()
+	const token = "mak_lastused"
+	key := &store.Key{ID: "k_used", Kind: store.KeyKindStatic, Label: "l", SecretHash: store.HashSecret(token),
+		Upstreams: []string{}, TTLSeconds: 60, CreatedAt: time.Now().UTC()}
+	if err := srv.store.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	got, err := srv.store.KeyByID(ctx, key.ID)
+	if err != nil || got.LastUsedAt == nil {
+		t.Fatalf("authenticated request must set last_used_at: %+v %v", got, err)
 	}
 }

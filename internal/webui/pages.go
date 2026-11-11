@@ -23,7 +23,8 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 	keys []*store.Key, cfg *config.Config, newToken string, linked map[string]bool) view.PortalData {
 	d := view.PortalData{NewToken: newToken}
 	if newToken != "" {
-		d.MCPURL = strings.TrimRight(cfg.BaseURL, "/") + "/mcp/" + newToken
+		d.MCPEndpoint = strings.TrimRight(cfg.BaseURL, "/") + "/mcp"
+		d.MCPURL = d.MCPEndpoint + "/" + newToken
 	}
 	for _, u := range globals {
 		kind := "global"
@@ -39,6 +40,7 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 	for _, k := range keys {
 		d.Keys = append(d.Keys, view.Key{
 			ID: k.ID, Label: k.Label, Kind: k.Kind, Upstreams: k.Upstreams, Revoked: k.Revoked(),
+			LastUsed: k.LastUsedAt, LastSuccess: k.LastSuccessAt,
 		})
 	}
 	for _, c := range cfg.OAuth.Clients {

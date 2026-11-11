@@ -42,6 +42,12 @@ func newLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
+// newServeLogger logs to stdout: serve has no machine-readable output, and
+// container log pipelines expect the service log there.
+func newServeLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+}
+
 // openStore opens (and migrates) the state database.
 func openStore(ctx context.Context, cfg *config.Config) (*store.Store, error) {
 	return store.Open(ctx, cfg.StateDir+"/proxy.db")

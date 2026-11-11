@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -84,7 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
-	return mux
+	return accessLog(s.logger, mux)
 }
 
 // OpsHandler serves the ops endpoints: /metrics, /healthz (process up) and
@@ -125,6 +126,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 			unauthorized(w)
 			return
+		}
+		// ponytail: one write per request; batch if request volume ever matters.
+		if err := s.store.MarkKeyUsed(r.Context(), key.ID, time.Now().UTC()); err != nil {
+			s.logger.Warn("mark key used", "key", key.ID, "error", err)
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, key)))
 	})

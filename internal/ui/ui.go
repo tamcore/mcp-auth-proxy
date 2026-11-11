@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 	"time"
 )
@@ -68,6 +69,14 @@ func New(logger *slog.Logger) *Renderer {
 	funcs := template.FuncMap{
 		"asset":  func(name string) string { return "/static/" + name + "?v=" + versions[name] },
 		"themes": func() []string { return []string{"auto", "light", "dark"} },
+		"has":    slices.Contains[[]string],
+		"list":   func(v ...string) []string { return v },
+		"when": func(t *time.Time) string {
+			if t == nil {
+				return "never"
+			}
+			return t.UTC().Format("2006-01-02 15:04 UTC")
+		},
 	}
 	layout := template.Must(template.New("layout").Funcs(funcs).ParseFS(files, "templates/layout.tmpl"))
 	pages, err := fs.Glob(files, "templates/*.tmpl")

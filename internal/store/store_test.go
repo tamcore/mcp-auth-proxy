@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -330,5 +331,96 @@ func TestRunnableUserUpstreamsOnlyAdminsRunCommands(t *testing.T) {
 				t.Fatal("non-admin stdio upstream must not be runnable")
 			}
 		}
+	}
+}
+
+func TestKeyUpstreamsUpdateAndActivity(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	owner := "u_keyowner"
+	if err := st.CreateUser(ctx, &User{ID: owner, Username: "keyowner", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	k := &Key{ID: "k_upd", Kind: KeyKindStatic, Label: "l", SecretHash: "h_upd", Upstreams: []string{"a"},
+		TTLSeconds: 60, CreatedAt: now, UserID: &owner}
+	if err := st.CreateKey(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateKeyUpstreams(ctx, k.ID, "u_other", []string{"b"}); err != ErrNotFound {
+		t.Fatalf("non-owner update: want ErrNotFound, got %v", err)
+	}
+	if err := st.UpdateKeyUpstreams(ctx, k.ID, owner, []string{"b", "c"}); err != nil {
+		t.Fatal(err)
+	}
+	assertKeyActivity(t, st, k.ID, now)
+}
+
+func assertKeyActivity(t *testing.T, st *Store, id string, now time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	k := &Key{ID: id}
+	used, ok := now.Add(time.Minute), now.Add(2*time.Minute)
+	if err := st.MarkKeyUsed(ctx, k.ID, used); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.MarkKeySuccess(ctx, k.ID, ok); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.KeyByID(ctx, k.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got.Upstreams, ",") != "b,c" {
+		t.Fatalf("upstreams: %v", got.Upstreams)
+	}
+	if got.LastUsedAt == nil || !got.LastUsedAt.Equal(used) || got.LastSuccessAt == nil || !got.LastSuccessAt.Equal(ok) {
+		t.Fatalf("activity: used=%v success=%v", got.LastUsedAt, got.LastSuccessAt)
+	}
+	all, err := st.ListKeys(ctx)
+	if err != nil || len(all) != 1 || all[0].LastSuccessAt == nil {
+		t.Fatalf("list keys must carry activity: %+v %v", all, err)
+	}
+}
+
+func TestDeleteRevokedKeyKeepsAudit(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	owner := "u_delowner"
+	if err := st.CreateUser(ctx, &User{ID: owner, Username: "delowner", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	k := &Key{ID: "k_del", Kind: KeyKindStatic, Label: "gone", SecretHash: "h_del", Upstreams: []string{},
+		TTLSeconds: 60, CreatedAt: now, UserID: &owner}
+	if err := st.CreateKey(ctx, k); err != nil {
+		t.Fatal(err)
+	}
+	sess := &Session{KeyID: k.ID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), Origin: "otp"}
+	if err := st.UpsertSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AppendAudit(ctx, &AuditEntry{ID: "a_del", UserID: owner, KeyID: k.ID, KeyLabel: k.Label,
+		ToolName: "t", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, owner); err != ErrNotFound {
+		t.Fatalf("active key must not be deletable: %v", err)
+	}
+	if err := st.RevokeKey(ctx, k.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, "u_someone"); err != ErrNotFound {
+		t.Fatalf("foreign key must not be deletable: %v", err)
+	}
+	if err := st.DeleteRevokedKey(ctx, k.ID, owner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.KeyByID(ctx, k.ID); err != ErrNotFound {
+		t.Fatalf("key must be gone: %v", err)
+	}
+	entries, err := st.ListAuditForUser(ctx, owner, 10)
+	if err != nil || len(entries) != 1 || entries[0].KeyLabel != "gone" {
+		t.Fatalf("audit history must survive key deletion: %+v %v", entries, err)
 	}
 }

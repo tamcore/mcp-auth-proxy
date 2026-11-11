@@ -52,12 +52,15 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	logger := newLogger()
+	logger := newServeLogger()
 	st, err := openStore(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = st.Close() }()
+	for _, m := range st.MigrationsApplied() {
+		logger.Info("migration applied", "migration", m, "backup", st.MigrationBackup())
+	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		return err
 	}

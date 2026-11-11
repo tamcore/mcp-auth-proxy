@@ -48,6 +48,9 @@ func TestKeyCreateListRevoke(t *testing.T) {
 	if !strings.Contains(m["mcp_url"], "/mcp/"+m["token"]) {
 		t.Fatalf("mcp url: %q", m["mcp_url"])
 	}
+	if !strings.HasSuffix(m["mcp_endpoint"], "/mcp") {
+		t.Fatalf("mcp endpoint: %q", m["mcp_endpoint"])
+	}
 	list := runKeyCmd(t, "list")
 	if !strings.Contains(list, m["id"]) || !strings.Contains(list, "laptop") {
 		t.Fatalf("list: %q", list)

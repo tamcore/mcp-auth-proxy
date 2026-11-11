@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +41,7 @@ type Proxy struct {
 	logResponses bool
 
 	mu      sync.Mutex
-	servers map[string]*mcp.Server
+	servers map[string]cachedServer
 	userUps map[string]map[string]*upstream.Upstream
 }
 
@@ -63,22 +64,30 @@ func New(o Options) *Proxy {
 	return &Proxy{
 		pool: o.Pool, store: o.Store, gate: o.Gate, metrics: o.Metrics, logger: o.Logger,
 		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses,
-		servers: map[string]*mcp.Server{}, userUps: map[string]map[string]*upstream.Upstream{},
+		servers: map[string]cachedServer{}, userUps: map[string]map[string]*upstream.Upstream{},
 	}
+}
+
+// cachedServer is a built per-key server and the upstream list it was built
+// for; a key whose upstreams changed since is rebuilt.
+type cachedServer struct {
+	srv       *mcp.Server
+	upstreams string
 }
 
 // ServerFor returns the cached per-key MCP server, building it on first use.
 func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, error) {
+	sig := strings.Join(key.Upstreams, "\x00")
 	p.mu.Lock()
-	srv, ok := p.servers[key.ID]
+	c, ok := p.servers[key.ID]
 	p.mu.Unlock()
-	if ok {
-		return srv, nil
+	if ok && c.upstreams == sig {
+		return c.srv, nil
 	}
 	srv, complete := p.build(ctx, key)
 	if complete {
 		p.mu.Lock()
-		p.servers[key.ID] = srv
+		p.servers[key.ID] = cachedServer{srv: srv, upstreams: sig}
 		p.mu.Unlock()
 	}
 	return srv, nil
@@ -200,6 +209,12 @@ func (p *Proxy) audit(ctx context.Context, key *store.Key,
 			e.Response = &s
 		}
 	}
+	attrs := []any{"user_id", e.UserID, "key_id", e.KeyID, "key", e.KeyLabel, "tool", e.ToolName,
+		"arguments", e.Arguments, "is_error", res != nil && res.IsError}
+	if e.Response != nil {
+		attrs = append(attrs, "response", *e.Response)
+	}
+	p.logger.Info("tool call", attrs...)
 	if err := p.store.AppendAudit(ctx, e); err != nil {
 		p.logger.Error("append audit", "error", err)
 	}
@@ -233,6 +248,11 @@ func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 	}
 	p.metrics.ToolAllowed()
 	p.audit(ctx, key, fullName, args, res)
+	if !res.IsError {
+		if err := p.store.MarkKeySuccess(ctx, key.ID, time.Now().UTC()); err != nil {
+			p.logger.Warn("mark key success", "key", key.ID, "error", err)
+		}
+	}
 	return res, nil
 }
 

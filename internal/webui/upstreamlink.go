@@ -36,18 +36,23 @@ func (p *pendingLinks) put(l pendingLink, now time.Time) {
 	p.m[l.req.State] = l
 }
 
-// take removes and returns the pending link for state, if still valid.
-func (p *pendingLinks) take(state string, now time.Time) (pendingLink, bool) {
+// take removes and returns the user's pending link for state, if still valid.
+// Another user's attempt leaves the link in place.
+func (p *pendingLinks) take(state, userID string, now time.Time) (pendingLink, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	l, ok := p.m[state]
+	if !ok || l.userID != userID {
+		return pendingLink{}, false
+	}
 	delete(p.m, state)
-	return l, ok && now.Before(l.deadline)
+	return l, now.Before(l.deadline)
 }
 
-func (ui *WebUI) oauthUpstream(name string) (config.UpstreamConfig, bool) {
+// oauthUpstream returns a configured OAuth upstream the user may use.
+func (ui *WebUI) oauthUpstream(name, username string) (config.UpstreamConfig, bool) {
 	for _, u := range ui.cfg.Upstreams {
-		if u.Name == name && u.OAuth != nil {
+		if u.Name == name && u.OAuth != nil && u.Allows(username) {
 			return u, true
 		}
 	}
@@ -55,60 +60,62 @@ func (ui *WebUI) oauthUpstream(name string) (config.UpstreamConfig, bool) {
 }
 
 func (ui *WebUI) linkCallbackURL() string {
-	return strings.TrimRight(ui.cfg.BaseURL, "/") + "/admin/upstream/callback"
+	return strings.TrimRight(ui.cfg.BaseURL, "/") + "/portal/upstream/callback"
 }
 
-// handleUpstreamLink starts the OAuth link of a configured upstream and sends
-// the admin to its authorize endpoint.
+// handleUpstreamLink starts linking the user's own account at an OAuth
+// upstream and sends them to its authorize endpoint.
 func (ui *WebUI) handleUpstreamLink(w http.ResponseWriter, r *http.Request) {
-	admin, ok := ui.requireAdmin(w, r)
+	user, ok := ui.sessions.Require(w, r, ui.store)
 	if !ok {
 		return
 	}
 	_ = r.ParseForm()
-	c, ok := ui.oauthUpstream(r.PostForm.Get("name"))
+	c, ok := ui.oauthUpstream(r.PostForm.Get("name"), user.Username)
 	if !ok {
 		http.Error(w, "unknown upstream or no oauth configured", http.StatusNotFound)
 		return
 	}
-	req, err := upstream.NewFromConfig(c, ui.store, nil, ui.logger).BeginLink(ui.linkCallbackURL())
+	up := upstream.NewFromConfig(c, ui.store, nil, ui.logger).WithOwner(user.ID)
+	req, err := up.BeginLink(ui.linkCallbackURL())
 	if err != nil {
 		ui.logger.Error("begin upstream link", "upstream", c.Name, "error", err)
 		http.Error(w, "could not start link", http.StatusInternalServerError)
 		return
 	}
 	now := time.Now()
-	ui.links.put(pendingLink{req: req, name: c.Name, userID: admin.ID, deadline: now.Add(linkTTL)}, now)
+	ui.links.put(pendingLink{req: req, name: c.Name, userID: user.ID, deadline: now.Add(linkTTL)}, now)
 	http.Redirect(w, r, req.URL, http.StatusSeeOther)
 }
 
-// handleUpstreamCallback finishes the link the same admin started.
+// handleUpstreamCallback finishes the link the same user started and stores
+// the token for that user only.
 func (ui *WebUI) handleUpstreamCallback(w http.ResponseWriter, r *http.Request) {
-	admin, ok := ui.requireAdmin(w, r)
+	user, ok := ui.sessions.Require(w, r, ui.store)
 	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	l, ok := ui.links.take(q.Get("state"), time.Now())
-	if !ok || l.userID != admin.ID {
-		ui.renderAdmin(w, r, admin, http.StatusBadRequest, "", "Link request unknown or expired. Start it again.")
+	l, ok := ui.links.take(q.Get("state"), user.ID, time.Now())
+	if !ok {
+		ui.renderPortalStatus(w, r, user, http.StatusBadRequest, "", "Link request unknown or expired. Start it again.")
 		return
 	}
 	if e := q.Get("error"); e != "" {
-		ui.renderAdmin(w, r, admin, http.StatusBadRequest, "", "Authorization for "+l.name+" failed: "+e)
+		ui.renderPortalStatus(w, r, user, http.StatusBadRequest, "", "Authorization for "+l.name+" failed: "+e)
 		return
 	}
-	c, ok := ui.oauthUpstream(l.name)
+	c, ok := ui.oauthUpstream(l.name, user.Username)
 	if !ok {
 		http.Error(w, "unknown upstream", http.StatusNotFound)
 		return
 	}
-	up := upstream.NewFromConfig(c, ui.store, nil, ui.logger)
+	up := upstream.NewFromConfig(c, ui.store, nil, ui.logger).WithOwner(user.ID)
 	if err := up.FinishLink(r.Context(), l.req, q.Get("code")); err != nil {
-		ui.logger.Error("finish upstream link", "upstream", l.name, "error", err)
-		ui.renderAdmin(w, r, admin, http.StatusBadGateway, "", "Linking "+l.name+" failed. See the server log.")
+		ui.logger.Error("finish upstream link", "upstream", l.name, "user", user.Username, "error", err)
+		ui.renderPortalStatus(w, r, user, http.StatusBadGateway, "", "Linking "+l.name+" failed. Try again later.")
 		return
 	}
-	ui.logger.Info("upstream linked", "upstream", l.name, "user", admin.Username)
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	ui.logger.Info("upstream linked", "upstream", l.name, "user", user.Username)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

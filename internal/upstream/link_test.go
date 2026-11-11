@@ -37,7 +37,7 @@ func TestBeginFinishLink(t *testing.T) {
 	defer tokenSrv.Close()
 	u := NewFromConfig(config.UpstreamConfig{Name: "garmin", URL: "https://up/mcp", OAuth: &config.UpstreamOAuthConfig{
 		AuthorizeURL: "https://idp/authorize", TokenURL: tokenSrv.URL, ClientID: linkClientID, Scopes: []string{"a", "b"},
-	}}, st, nil, nil)
+	}}, st, nil, nil).WithOwner("u_x")
 
 	req, err := u.BeginLink(redirect)
 	if err != nil {
@@ -47,9 +47,12 @@ func TestBeginFinishLink(t *testing.T) {
 	if err := u.FinishLink(ctx, req, "the-code"); err != nil {
 		t.Fatal(err)
 	}
-	tok, err := st.GetUpstreamToken(ctx, "garmin")
+	tok, err := st.GetUpstreamToken(ctx, "garmin", "u_x")
 	if err != nil || tok.AccessToken != "at" || tok.RefreshToken != "rt" {
-		t.Fatalf("token not stored: %+v %v", tok, err)
+		t.Fatalf("token not stored for its owner: %+v %v", tok, err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, "garmin", ""); err == nil {
+		t.Fatal("token leaked to the unowned slot")
 	}
 }
 

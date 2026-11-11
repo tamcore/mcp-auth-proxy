@@ -75,12 +75,5 @@ func (ui *WebUI) renderAdmin(w http.ResponseWriter, r *http.Request, admin *stor
 		return
 	}
 	data := view.AdminData{Users: users, Invite: invite, Error: errMsg}
-	for _, u := range ui.cfg.Upstreams {
-		if u.OAuth == nil {
-			continue
-		}
-		_, terr := ui.store.GetUpstreamToken(r.Context(), u.Name)
-		data.Upstreams = append(data.Upstreams, view.LinkUpstream{Name: u.Name, URL: u.URL, Linked: terr == nil})
-	}
 	ui.pages.Render(w, status, "admin", page("Admin", admin, data))
 }

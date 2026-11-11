@@ -70,6 +70,7 @@ func (u *Upstream) FinishLink(ctx context.Context, req *AuthRequest, code string
 		return err
 	}
 	tok.Upstream = u.cfg.Name
+	tok.UserID = u.owner
 	return u.store.SaveUpstreamToken(ctx, tok)
 }
 

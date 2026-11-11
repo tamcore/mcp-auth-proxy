@@ -1,4 +1,5 @@
 {{define "content"}}{{with .Data}}
+{{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
 {{if .NewToken}}
 <section class="card border-teal-300 ring-4 ring-teal-500/10 dark:border-teal-400/40" aria-labelledby="newkey" data-testid="new-key">
   <h2 id="newkey" class="card-title">New key, copy it now</h2>
@@ -76,7 +77,14 @@
     <li class="flex flex-wrap items-center gap-2" data-testid="server">
       <strong>{{.Name}}</strong>
       <span class="{{if eq .Kind "own"}}badge-accent{{else}}badge{{end}}">{{.Kind}}</span>
+      {{if .OAuth}}{{if .Linked}}<span class="badge-accent">linked</span>{{else}}<span class="badge">not linked</span>{{end}}{{end}}
       <code class="muted min-w-0 flex-1 truncate font-mono text-xs">{{.Source}}</code>
+      {{if .OAuth}}
+      <form method="post" action="/portal/upstream/link">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button class="{{if .Linked}}btn-ghost{{else}}btn{{end}}">{{if .Linked}}Re-link{{else}}Link my account{{end}}</button>
+      </form>
+      {{end}}
       {{if .ID}}
       <form method="post" action="/portal/upstream/delete">
         <input type="hidden" name="id" value="{{.ID}}">

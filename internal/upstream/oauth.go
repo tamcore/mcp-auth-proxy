@@ -22,7 +22,7 @@ import (
 const clientIDFormKey = "client_id"
 
 // ErrNoToken is returned when no stored token exists for an upstream.
-var ErrNoToken = errors.New("upstream: no stored oauth token; run `upstream link`")
+var ErrNoToken = errors.New("upstream: no stored oauth token")
 
 // authRoundTripper injects the stored bearer token, applies static headers, and
 // on a 401 refreshes the token once, persists the rotated set, and retries.
@@ -63,7 +63,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 }
 
 func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
-	tok, err := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name)
+	tok, err := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name, rt.up.owner)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return "", ErrNoToken
@@ -74,7 +74,7 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 		if err := rt.refresh(ctx); err != nil {
 			rt.up.logger.Warn("upstream token refresh failed", "upstream", rt.up.cfg.Name, "error", err)
 		}
-		if tok2, err2 := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name); err2 == nil {
+		if tok2, err2 := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name, rt.up.owner); err2 == nil {
 			return tok2.AccessToken, nil
 		}
 	}
@@ -89,7 +89,10 @@ func (rt *authRoundTripper) refresh(ctx context.Context) error {
 	if cfg == nil {
 		return errors.New("upstream: oauth not configured")
 	}
-	tok, err := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name)
+	tok, err := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name, rt.up.owner)
+	if errors.Is(err, store.ErrNotFound) {
+		return ErrNoToken
+	}
 	if err != nil {
 		return err
 	}
@@ -109,6 +112,7 @@ func (rt *authRoundTripper) refresh(ctx context.Context) error {
 		newTok.RefreshToken = tok.RefreshToken // rotation optional; keep old
 	}
 	newTok.Upstream = rt.up.cfg.Name
+	newTok.UserID = rt.up.owner
 	return rt.up.store.SaveUpstreamToken(ctx, newTok)
 }
 

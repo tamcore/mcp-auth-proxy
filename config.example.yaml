@@ -53,9 +53,9 @@ upstreams:
   #   users: [alice]        # omit for global (all users)
   #   headers:
   #     X-Custom: value
-  #   oauth:               # optional: link once at /admin, then tokens
-  #     authorize_url: https://idp.example.com/authorize   # are refreshed and
-  #     token_url: https://idp.example.com/token           # persisted for you
+  #   oauth:               # optional: each user links their own account in the
+  #     authorize_url: https://idp.example.com/authorize   # portal; tokens are
+  #     token_url: https://idp.example.com/token           # per user, refreshed
   #     client_id: my-client-id
   #     scopes: ["mcp:read", "mcp:write"]
 

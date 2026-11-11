@@ -59,7 +59,7 @@ func newUpstreamCmd() *cobra.Command {
 		},
 	}, &cobra.Command{
 		Use:   "link <name>",
-		Short: "Run the one-time interactive OAuth linking flow for an upstream",
+		Short: "Link an OAuth upstream for keys without a user (users link their own account in the web portal)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig(cmd)

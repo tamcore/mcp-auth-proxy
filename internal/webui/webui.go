@@ -50,8 +50,8 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin", ui.handleAdmin)
 	mux.HandleFunc("POST /admin/disable", ui.handleAdminDisable)
 	mux.HandleFunc("POST /admin/invite", ui.handleAdminInvite)
-	mux.HandleFunc("POST /admin/upstream/link", ui.handleUpstreamLink)
-	mux.HandleFunc("GET /admin/upstream/callback", ui.handleUpstreamCallback)
+	mux.HandleFunc("POST /portal/upstream/link", ui.handleUpstreamLink)
+	mux.HandleFunc("GET /portal/upstream/callback", ui.handleUpstreamCallback)
 }
 
 // Sessions exposes the session verifier for the OAuth authorize gate.

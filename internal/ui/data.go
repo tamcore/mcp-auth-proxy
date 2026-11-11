@@ -21,6 +21,8 @@ type Server struct {
 	Kind   string
 	Source string
 	ID     string
+	OAuth  bool
+	Linked bool
 }
 
 // Key is an API key listed on the portal.
@@ -34,6 +36,7 @@ type Key struct {
 
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.
 type PortalData struct {
+	Error        string
 	NewToken     string
 	MCPURL       string
 	Servers      []Server
@@ -48,19 +51,11 @@ type AuditData struct {
 	Entries   []*store.AuditEntry
 }
 
-// LinkUpstream is a configured upstream with OAuth and its link state.
-type LinkUpstream struct {
-	Name   string
-	URL    string
-	Linked bool
-}
-
 // AdminData feeds admin.tmpl. Invite is set once, right after minting.
 type AdminData struct {
-	Invite    string
-	Error     string
-	Users     []*store.User
-	Upstreams []LinkUpstream
+	Invite string
+	Error  string
+	Users  []*store.User
 }
 
 // ConsentData feeds consent.tmpl.

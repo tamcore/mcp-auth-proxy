@@ -59,11 +59,24 @@ func (ui *WebUI) handlePortal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *WebUI) renderPortal(w http.ResponseWriter, r *http.Request, user *store.User, newToken string) {
+	ui.renderPortalStatus(w, r, user, http.StatusOK, newToken, "")
+}
+
+// renderPortalStatus renders the portal with an HTTP status and an optional
+// one-off error banner.
+func (ui *WebUI) renderPortalStatus(w http.ResponseWriter, r *http.Request, user *store.User,
+	status int, newToken, errMsg string) {
 	globals := ui.allowedUpstreams(user.Username)
-	own := ui.ownUpstreams(r, user.ID)
-	keys := ui.ownKeys(r, user.ID)
-	data := portalData(globals, own, keys, ui.cfg, newToken)
-	ui.pages.Render(w, http.StatusOK, "portal", page("mcp-auth-proxy", user, data))
+	linked := map[string]bool{}
+	for _, u := range globals {
+		if u.OAuth != nil {
+			_, err := ui.store.GetUpstreamToken(r.Context(), u.Name, user.ID)
+			linked[u.Name] = err == nil
+		}
+	}
+	data := portalData(globals, ui.ownUpstreams(r, user.ID), ui.ownKeys(r, user.ID), ui.cfg, newToken, linked)
+	data.Error = errMsg
+	ui.pages.Render(w, status, "portal", page("mcp-auth-proxy", user, data))
 }
 
 func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {

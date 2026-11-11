@@ -199,7 +199,7 @@ func TestUpstreamTokenRoundTrip(t *testing.T) {
 	if err := st.SaveUpstreamToken(ctx, tok); err != nil {
 		t.Fatal(err)
 	}
-	got, err := st.GetUpstreamToken(ctx, "echo")
+	got, err := st.GetUpstreamToken(ctx, "echo", "")
 	if err != nil || got.AccessToken != "at" || got.RefreshToken != "rt" || got.ExpiresAt == nil {
 		t.Fatalf("token: %+v %v", got, err)
 	}
@@ -208,12 +208,37 @@ func TestUpstreamTokenRoundTrip(t *testing.T) {
 	if err := st.SaveUpstreamToken(ctx, rotated); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = st.GetUpstreamToken(ctx, "echo")
+	got, _ = st.GetUpstreamToken(ctx, "echo", "")
 	if got.AccessToken != "at2" || got.RefreshToken != "rt2" {
 		t.Fatalf("rotation not persisted: %+v", got)
 	}
-	if _, err := st.GetUpstreamToken(ctx, "nope"); err != ErrNotFound {
+	if _, err := st.GetUpstreamToken(ctx, "nope", ""); err != ErrNotFound {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpstreamTokensArePerUser(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	for _, tok := range []*UpstreamToken{
+		{Upstream: "garmin", UserID: "u_a", AccessToken: "at-a"},
+		{Upstream: "garmin", UserID: "u_b", AccessToken: "at-b"},
+	} {
+		if err := st.SaveUpstreamToken(ctx, tok); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for user, want := range map[string]string{"u_a": "at-a", "u_b": "at-b"} {
+		got, err := st.GetUpstreamToken(ctx, "garmin", user)
+		if err != nil || got.AccessToken != want || got.UserID != user {
+			t.Fatalf("%s: %+v %v", user, got, err)
+		}
+	}
+	if _, err := st.GetUpstreamToken(ctx, "garmin", "u_c"); err != ErrNotFound {
+		t.Fatalf("other user must have no token: %v", err)
+	}
+	if _, err := st.GetUpstreamToken(ctx, "garmin", ""); err != ErrNotFound {
+		t.Fatalf("user tokens must not leak to the unowned slot: %v", err)
 	}
 }
 

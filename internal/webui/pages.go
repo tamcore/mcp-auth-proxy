@@ -20,7 +20,7 @@ func source(url string, command []string) string {
 }
 
 func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
-	keys []*store.Key, cfg *config.Config, newToken string) view.PortalData {
+	keys []*store.Key, cfg *config.Config, newToken string, linked map[string]bool) view.PortalData {
 	d := view.PortalData{NewToken: newToken}
 	if newToken != "" {
 		d.MCPURL = strings.TrimRight(cfg.BaseURL, "/") + "/mcp/" + newToken
@@ -30,7 +30,8 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 		if !u.Global() {
 			kind = "shared"
 		}
-		d.Servers = append(d.Servers, view.Server{Name: u.Name, Kind: kind, Source: source(u.URL, u.Command)})
+		d.Servers = append(d.Servers, view.Server{Name: u.Name, Kind: kind, Source: source(u.URL, u.Command),
+			OAuth: u.OAuth != nil, Linked: linked[u.Name]})
 	}
 	for _, u := range own {
 		d.Servers = append(d.Servers, view.Server{Name: u.Name, Kind: "own", Source: source(u.URL, u.Command), ID: u.ID})

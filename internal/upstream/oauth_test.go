@@ -83,7 +83,7 @@ func TestRefreshRotationPersists(t *testing.T) {
 	if refreshes.Load() == 0 {
 		t.Fatal("refresh token was not used")
 	}
-	got, err := st.GetUpstreamToken(ctx, "api")
+	got, err := st.GetUpstreamToken(ctx, "api", "")
 	if err != nil {
 		t.Fatal(err)
 	}

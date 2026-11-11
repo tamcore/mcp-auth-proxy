@@ -14,14 +14,33 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
+// lockedBuffer is a goroutine-safe bytes.Buffer for capturing subprocess stderr.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // startMultiUserEnv starts the proxy with two configured users, a global and an
 // alice-only upstream, and a fake ntfy. stderr is captured to recover the
-// auto-generated passwords.
-func startMultiUserEnv(t *testing.T) (*env, *bytes.Buffer) {
+// invite links.
+func startMultiUserEnv(t *testing.T) (*env, *lockedBuffer) {
 	t.Helper()
 	dir := t.TempDir()
 	port := freePort(t)
@@ -48,7 +67,7 @@ upstreams:
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stderr := &bytes.Buffer{}
+	stderr := &lockedBuffer{}
 	cmd := exec.Command(binary, "serve", "--config", cfgPath)
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
@@ -75,7 +94,7 @@ upstreams:
 	return nil, nil
 }
 
-func inviteURL(t *testing.T, stderr *bytes.Buffer, user string) string {
+func inviteURL(t *testing.T, stderr *lockedBuffer, user string) string {
 	t.Helper()
 	re := regexp.MustCompile(`"user":"` + user + `","url":"([^"]+)"`)
 	m := re.FindStringSubmatch(stderr.String())
@@ -149,7 +168,7 @@ func portalCreateKey(t *testing.T, e *env, cookie *http.Cookie, upstreams []stri
 }
 
 // bobRejected verifies bob cannot use the alice-only upstream.
-func bobRejected(t *testing.T, e *env, stderr *bytes.Buffer) {
+func bobRejected(t *testing.T, e *env, stderr *lockedBuffer) {
 	t.Helper()
 	bobCookie := setPasswordViaInvite(t, inviteURL(t, stderr, "bob"), "bob-password-1")
 	form := url.Values{"label": {"x"}, "upstream": {"private"}}

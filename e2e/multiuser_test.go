@@ -227,3 +227,20 @@ func toolsAndAudit(t *testing.T, e *env, cookie *http.Cookie, token string) {
 		t.Fatal("audit page missing the recorded call")
 	}
 }
+
+func TestServeExitsCleanlyOnSIGINT(t *testing.T) {
+	e, _ := startMultiUserEnv(t)
+	if err := e.cmd.Process.Signal(os.Interrupt); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- e.cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serve must exit 0 on SIGINT: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not exit within 10s of SIGINT")
+	}
+}

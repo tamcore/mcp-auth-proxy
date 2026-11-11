@@ -70,7 +70,7 @@ func runServe(cmd *cobra.Command) error {
 		return err
 	}
 	for name, token := range invites {
-		logger.Warn("invite link for new user (shown once)",
+		logger.Warn("invite link for user without password (replaces earlier links)",
 			"user", name, "url", strings.TrimRight(cfg.BaseURL, "/")+"/invite/"+token)
 	}
 	gcAudit(st, cfg, logger)
@@ -113,11 +113,12 @@ func runServe(cmd *cobra.Command) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		shutdownErr := httpSrv.Shutdown(shutdownCtx)
 		serveErr := <-errCh
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
-		return errors.Join(httpSrv.Shutdown(shutdownCtx), serveErr)
+		return errors.Join(shutdownErr, serveErr)
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil // clean shutdown via signal

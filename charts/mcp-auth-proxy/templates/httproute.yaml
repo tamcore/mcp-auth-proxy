@@ -10,8 +10,12 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- if not .Values.httpRoute.parentRefs }}{{ fail "httpRoute.parentRefs is required" }}{{ end }}
   parentRefs:
-    {{- required "httpRoute.parentRefs is required" .Values.httpRoute.parentRefs | toYaml | nindent 4 }}
+    {{- range .Values.httpRoute.parentRefs }}
+    {{- /* API-server defaults spelled out so GitOps diffs stay clean. */}}
+    - {{ toYaml (merge (dict) . (dict "group" "gateway.networking.k8s.io" "kind" "Gateway")) | indent 6 | trim }}
+    {{- end }}
   {{- with .Values.httpRoute.hostnames }}
   hostnames:
     {{- toYaml . | nindent 4 }}
@@ -22,6 +26,9 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: {{ include "mcp-auth-proxy.fullname" . }}
+        - group: ""
+          kind: Service
+          name: {{ include "mcp-auth-proxy.fullname" . }}
           port: {{ .Values.service.port }}
+          weight: 1
 {{- end }}

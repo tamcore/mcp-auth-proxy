@@ -98,5 +98,9 @@ httpRoute:
   #     sectionName: https
   hostnames: []
 
+resources: {}
+#   requests: {cpu: 10m, memory: 32Mi}
+#   limits: {memory: 128Mi}
+
 podAnnotations: {}
 podLabels: {}

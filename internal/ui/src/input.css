@@ -1,0 +1,81 @@
+@import "tailwindcss" source(none);
+@source "../templates";
+
+/* JS sets data-theme; without JS the system preference still applies. */
+@custom-variant dark {
+  &:where([data-theme=dark], [data-theme=dark] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(html:not([data-theme]), html:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html[data-theme=dark] {
+    color-scheme: dark;
+  }
+  body {
+    @apply min-h-dvh bg-slate-50 text-slate-800 antialiased dark:bg-slate-900 dark:text-slate-100;
+    background-image: radial-gradient(60rem 30rem at 50% -10rem, rgb(20 184 166 / 0.12), transparent);
+  }
+  a {
+    @apply text-teal-700 underline-offset-2 hover:underline dark:text-teal-300;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-teal-600 dark:outline-teal-300;
+  }
+}
+
+@utility card {
+  @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 dark:border-slate-700/70 dark:bg-slate-800/80;
+}
+
+@utility card-title {
+  @apply mb-3 text-base font-semibold text-slate-900 dark:text-white;
+}
+
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800 motion-reduce:transition-none dark:bg-teal-400 dark:text-slate-950 dark:hover:bg-teal-300;
+}
+
+@utility btn-ghost {
+  @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full border border-slate-300 bg-transparent px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 motion-reduce:transition-none dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700;
+}
+
+@utility btn-danger {
+  @apply inline-flex cursor-pointer items-center justify-center rounded-full border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 motion-reduce:transition-none dark:border-rose-400/50 dark:text-rose-300 dark:hover:bg-rose-500/10;
+}
+
+@utility field {
+  @apply block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500;
+}
+
+@utility field-label {
+  @apply mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300;
+}
+
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-700 dark:text-slate-200;
+}
+
+@utility badge-accent {
+  @apply inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-teal-200 dark:bg-teal-400/10 dark:text-teal-200 dark:ring-teal-400/30;
+}
+
+@utility mono {
+  @apply rounded-lg bg-slate-100 px-2 py-1 font-mono text-xs break-all text-slate-800 dark:bg-slate-900 dark:text-slate-200;
+}
+
+@utility muted {
+  @apply text-sm text-slate-500 dark:text-slate-400;
+}
+
+@utility alert-error {
+  @apply rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-200 dark:ring-rose-400/30;
+}

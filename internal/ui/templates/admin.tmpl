@@ -1,0 +1,54 @@
+{{define "content"}}{{with .Data}}
+<h1 class="text-xl font-semibold text-slate-900 dark:text-white">Admin</h1>
+{{with .Invite}}
+<section class="card border-teal-300 ring-4 ring-teal-500/10 dark:border-teal-400/40" aria-labelledby="newinvite" data-testid="new-invite">
+  <h2 id="newinvite" class="card-title">Invite link, hand it over now</h2>
+  <div class="flex flex-wrap items-center gap-2">
+    <code class="mono min-w-0 flex-1">{{.}}</code>
+    <button type="button" class="btn-ghost" data-copy="{{.}}">Copy</button>
+  </div>
+  <p class="muted mt-3">Single-use, expires in 7 days.</p>
+</section>
+{{end}}
+<section class="card p-0 sm:p-0" aria-labelledby="users">
+  <h2 id="users" class="card-title px-5 pt-5 sm:px-6 sm:pt-6">Users</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-left text-sm">
+      <thead class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <tr class="border-b border-slate-200 dark:border-slate-700">
+          <th scope="col" class="px-5 py-3 font-medium sm:px-6">User</th>
+          <th scope="col" class="px-5 py-3 font-medium">Role</th>
+          <th scope="col" class="px-5 py-3 font-medium">State</th>
+          <th scope="col" class="px-5 py-3 font-medium"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+        {{range .Users}}
+        <tr data-testid="user-row">
+          <td class="px-5 py-3 font-medium sm:px-6">{{.Username}}</td>
+          <td class="px-5 py-3">{{if .Admin}}<span class="badge-accent">admin</span>{{else}}<span class="badge">user</span>{{end}}</td>
+          <td class="px-5 py-3">{{if .Disabled}}<span class="badge">disabled</span>{{else}}<span class="badge-accent">active</span>{{end}}</td>
+          <td class="px-5 py-3">
+            <div class="flex flex-wrap justify-end gap-2">
+              <form method="post" action="/admin/disable">
+                <input type="hidden" name="id" value="{{.ID}}">
+                {{if .Disabled}}
+                <input type="hidden" name="disabled" value="0"><button class="btn-ghost">Enable</button>
+                {{else}}
+                <input type="hidden" name="disabled" value="1"><button class="btn-danger">Disable</button>
+                {{end}}
+              </form>
+              <form method="post" action="/admin/invite">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button class="btn-ghost">New invite link</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted border-t border-slate-200 px-5 py-4 sm:px-6 dark:border-slate-700">Admins are toggled only in the config file (<code class="font-mono">admins</code> list). A disabled user cannot log in and their API keys stop working immediately.</p>
+</section>
+{{end}}{{end}}

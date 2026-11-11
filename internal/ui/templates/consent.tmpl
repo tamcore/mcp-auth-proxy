@@ -1,0 +1,24 @@
+{{define "content"}}{{with .Data}}
+<div class="mx-auto max-w-lg pt-6">
+  <div class="card">
+    <h1 class="mb-1 text-xl font-semibold text-slate-900 dark:text-white">Authorize identity</h1>
+    <p class="mb-4"><strong>{{.Client}}</strong> wants to connect to this MCP auth proxy.</p>
+    <div class="mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-100 dark:ring-amber-400/30" role="note">
+      Logging in grants an <em>identity</em> only: the client may list tools and ask for authorization.
+      <strong>Every tool call still requires a one-time code sent to the owner's phone.</strong>
+      Logging in never authorizes tool calls.
+    </div>
+    <form method="post" action="/oauth/consent" class="space-y-4">
+      <input type="hidden" name="client_id" value="{{.ClientID}}">
+      <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+      <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+      <input type="hidden" name="state" value="{{.State}}">
+      <div>
+        <label class="field-label" for="label">Label for this client</label>
+        <input class="field" id="label" type="text" name="label" maxlength="80" placeholder="e.g. Claude on my laptop">
+      </div>
+      <button type="submit" class="btn w-full">Grant identity</button>
+    </form>
+  </div>
+</div>
+{{end}}{{end}}

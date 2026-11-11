@@ -48,10 +48,14 @@ base_url: {{ required "config.baseURL is required: approve/deny URLs and the MCP
 listen_addr: {{ .Values.config.listenAddr | quote }}
 state_dir: /data
 session_ttl: {{ .Values.config.sessionTTL | quote }}
-upstreams: {{ .Values.config.upstreams | toJson | quote }}
+{{- if not .Values.config.users }}{{ fail "config.users needs at least one user" }}{{ end }}
+users: {{ .Values.config.users | toJson }}
+admins: {{ .Values.config.admins | toJson }}
+audit: {{ .Values.config.audit | toJson }}
+upstreams: {{ .Values.config.upstreams | toJson }}
 oauth:
-  clients: {{ .Values.config.oauthClients | toJson | quote }}
+  clients: {{ .Values.config.oauthClients | toJson }}
 ntfy:
-  enabled: {{ .Values.ntfy.enabled | quote }}
+  enabled: {{ .Values.ntfy.enabled }}
   url: {{ .Values.ntfy.url | quote }}
 {{- end }}

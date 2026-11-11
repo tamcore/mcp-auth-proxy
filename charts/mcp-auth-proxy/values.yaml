@@ -40,6 +40,15 @@ config:
   listenAddr: "0.0.0.0:8080"
   sessionTTL: 8h
   logLevel: info
+  # Usernames of the instance. Users missing from the database get a single-use
+  # invite link in the pod log on start. Required.
+  users: []
+  # Admins (subset of users) can disable users and mint invite links at /admin.
+  admins: []
+  audit:
+    enabled: true
+    log_responses: false
+    retention: 720h
   # Upstream MCP servers, as YAML. Each entry has a name and exactly one of
   # url (streamable HTTP) or command (stdio).
   upstreams: []
@@ -77,6 +86,17 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+# Gateway API HTTPRoute, an alternative to the Ingress. TLS terminates at the
+# referenced Gateway listener.
+httpRoute:
+  enabled: false
+  annotations: {}
+  parentRefs: []
+  #   - name: my-gateway
+  #     namespace: gateway-system
+  #     sectionName: https
+  hostnames: []
 
 podAnnotations: {}
 podLabels: {}

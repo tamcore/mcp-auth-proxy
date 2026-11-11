@@ -7,9 +7,9 @@ Create a client key inside the pod:
   kubectl exec deploy/{{ include "mcp-auth-proxy.fullname" . }} -- \
     mcp-auth-proxy key create --label my-client
 
-{{- if not (or .Values.ingress.enabled) }}
+{{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
 
-WARNING: ingress is disabled, so the origin above does not resolve to this
+WARNING: ingress and httpRoute are disabled, so the origin above does not resolve to this
 Service from outside the cluster.
 {{- end }}
 {{- if not .Values.ntfy.enabled }}

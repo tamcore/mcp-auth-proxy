@@ -23,15 +23,18 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.0
 
       - name: Lint
-        run: helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example
+        run: helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example --set 'config.users[0]=alice'
 
       - name: Template with the documented minimum
         run: |
           helm template mcp-auth-proxy ./charts/mcp-auth-proxy \
             --set config.baseURL=https://mcp.example \
+            --set 'config.users[0]=alice' \
             --set 'config.upstreams[0].name=echo' \
             --set 'config.upstreams[0].command[0]=mcp-auth-proxy' \
             --set 'config.upstreams[0].command[1]=dev-echo' \
             --set ntfy.enabled=true --set ntfy.topic=testtopic \
             --set metrics.serviceMonitor.enabled=true \
-            --set ingress.enabled=true > /dev/null
+            --set ingress.enabled=true \
+            --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw' \
+            --set 'httpRoute.hostnames[0]=mcp.example' > /dev/null

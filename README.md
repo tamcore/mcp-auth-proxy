@@ -175,7 +175,7 @@ go mod tidy
 golangci-lint run
 golangci-lint run --build-tags e2e ./e2e/
 golangci-lint run --build-tags live ./live/
-helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example
+helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example --set 'config.users[0]=alice'
 ```
 
 The e2e suite drives the web UI in headless Chromium via playwright-go. The

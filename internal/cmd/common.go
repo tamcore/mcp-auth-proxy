@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 
@@ -20,9 +21,19 @@ func configPath(cmd *cobra.Command) string {
 	return p
 }
 
-// loadConfig loads and validates the configuration.
+// loadConfig loads and validates the configuration. A config file is required:
+// --config, MCP_PROXY_CONFIG, or ./config.yaml must exist.
 func loadConfig(cmd *cobra.Command) (*config.Config, error) {
-	return config.Load(configPath(cmd))
+	p := configPath(cmd)
+	if p == "" {
+		if _, err := os.Stat("config.yaml"); err == nil {
+			p = "config.yaml"
+		}
+	}
+	if p == "" {
+		return nil, errors.New("no config file: pass --config, set MCP_PROXY_CONFIG, or create ./config.yaml")
+	}
+	return config.Load(p)
 }
 
 // newLogger builds the JSON-to-stderr logger. stdout stays reserved for MCP

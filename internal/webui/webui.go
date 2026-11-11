@@ -18,6 +18,9 @@ type WebUI struct {
 
 // New builds the web UI.
 func New(st *store.Store, cfg *config.Config, signSecret []byte, logger *slog.Logger) *WebUI {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &WebUI{
 		store:    st,
 		cfg:      cfg,

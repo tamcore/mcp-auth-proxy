@@ -153,6 +153,15 @@ func (s *Store) EnsureConfigUsers(ctx context.Context, usernames, admins []strin
 					return nil, err
 				}
 			}
+			if u.PasswordHash == "" {
+				// No password set yet: re-mint an invite on every start so the
+				// bootstrap link stays visible in the logs until used.
+				token, err := s.CreateInvite(ctx, u.ID, now)
+				if err != nil {
+					return nil, err
+				}
+				invites[name] = token
+			}
 			continue
 		}
 		if err != ErrNotFound {
@@ -196,12 +205,48 @@ func (s *Store) CreateInvite(ctx context.Context, userID string, now time.Time) 
 	}
 	token := hex.EncodeToString(raw)
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO invites (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
-		HashSecret(token), userID, FormatTime(now), FormatTime(now.Add(inviteTTL)))
+INSERT INTO invites (token_hash, token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
+		HashSecret(token), token, userID, FormatTime(now), FormatTime(now.Add(inviteTTL)))
 	if err != nil {
 		return "", fmt.Errorf("store: create invite: %w", err)
 	}
 	return token, nil
+}
+
+// PendingInvite is an unconsumed, unexpired invite for a not-yet-onboarded user.
+type PendingInvite struct {
+	Username  string
+	Token     string
+	ExpiresAt time.Time
+}
+
+// PendingInvites returns invite links for users without a password, newest
+// first, so the login page can show them until onboarding completes.
+func (s *Store) PendingInvites(ctx context.Context, now time.Time) ([]PendingInvite, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT u.username, i.token, i.expires_at FROM invites i
+JOIN users u ON u.id = i.user_id
+WHERE i.used_at IS NULL AND u.password_hash = '' AND i.token IS NOT NULL
+ORDER BY i.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []PendingInvite
+	for rows.Next() {
+		var p PendingInvite
+		var expires string
+		if err := rows.Scan(&p.Username, &p.Token, &expires); err != nil {
+			return nil, err
+		}
+		exp, perr := ParseTime(expires)
+		if perr != nil || !now.Before(exp) {
+			continue
+		}
+		p.ExpiresAt = exp
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // ConsumeInvite atomically marks the token used and returns its user, or

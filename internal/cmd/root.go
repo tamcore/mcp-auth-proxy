@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -27,7 +28,11 @@ func Execute(b BuildInfo) {
 		Long: "mcp-auth-proxy fronts several MCP servers behind one endpoint. Every AI client gets its own " +
 			"key and MCP URL, and every tool call is gated behind a one-time code pushed to the owner's phone.",
 	}
+	root.SilenceUsage = true // runtime errors are not usage errors
 	root.PersistentFlags().String("config", "", "path to YAML config file (env MCP_PROXY_CONFIG)")
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		return errors.New("no command given; try: serve, key, upstream, doctor, dev-echo, version")
+	}
 	root.AddCommand(newServeCmd(), newKeyCmd(), newUpstreamCmd(), newDoctorCmd(), newDevEchoCmd(), newVersionCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

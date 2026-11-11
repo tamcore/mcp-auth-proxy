@@ -244,10 +244,10 @@ func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 	if _, err := st.ConsumeInvite(ctx, invites[testAlice], time.Now().UTC()); err != store.ErrNotFound {
 		t.Fatalf("reuse must fail: %v", err)
 	}
-	// second run mints nothing new
+	// second run re-mints invites for users who still have no password
 	invites2, err := st.EnsureConfigUsers(ctx, []string{testAlice, testBob}, nil, time.Now().UTC())
-	if err != nil || len(invites2) != 0 {
-		t.Fatalf("second run must not re-invite: %v %v", invites2, err)
+	if err != nil || len(invites2) != 2 {
+		t.Fatalf("passwordless users must get a fresh invite each start: %v %v", invites2, err)
 	}
 }
 

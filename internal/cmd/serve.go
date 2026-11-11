@@ -113,8 +113,15 @@ func runServe(cmd *cobra.Command) error {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return errors.Join(httpSrv.Shutdown(shutdownCtx), <-errCh)
+		serveErr := <-errCh
+		if errors.Is(serveErr, http.ErrServerClosed) {
+			serveErr = nil
+		}
+		return errors.Join(httpSrv.Shutdown(shutdownCtx), serveErr)
 	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil // clean shutdown via signal
+		}
 		return err
 	}
 }

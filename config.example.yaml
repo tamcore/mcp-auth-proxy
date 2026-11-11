@@ -9,6 +9,9 @@ base_url: http://127.0.0.1:8080
 # Listen address of the HTTP server.
 listen_addr: 127.0.0.1:8080
 
+# Ops listener: /metrics, /healthz, /readyz. Keep it off the public network.
+ops_listen_addr: 127.0.0.1:9090
+
 # State directory: holds proxy.db and sign.secret (mode 0600).
 state_dir: ./data
 

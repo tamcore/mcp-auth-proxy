@@ -47,7 +47,7 @@ internal/
   ui/                    HTML templates, Tailwind CSS, theme JS; /static/ handler
   oauthserver/           client-facing OAuth AS + consent page
   upstream/              MCP client pool + OAuth linking/refresh
-  server/                HTTP mux: /mcp, /oauth, /approve, /deny, /metrics
+  server/                app mux (/mcp, /oauth, /approve, /deny, UI) + ops mux (/metrics, /healthz, /readyz)
   metrics/               prometheus with a closed label vocabulary
 migrations/              embedded SQL, forward-only
 e2e/                     end-to-end tests (build tag: e2e)

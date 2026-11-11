@@ -16,10 +16,12 @@ import (
 // Defaults.
 const (
 	DefaultListenAddr = "127.0.0.1:8080"
-	DefaultBaseURL    = "http://127.0.0.1:8080"
-	DefaultStateDir   = "./data"
-	DefaultSessionTTL = 8 * time.Hour
-	DefaultNtfyURL    = "https://ntfy.sh"
+	// DefaultOpsListenAddr serves /metrics, /healthz and /readyz.
+	DefaultOpsListenAddr = "127.0.0.1:9090"
+	DefaultBaseURL       = "http://127.0.0.1:8080"
+	DefaultStateDir      = "./data"
+	DefaultSessionTTL    = 8 * time.Hour
+	DefaultNtfyURL       = "https://ntfy.sh"
 	// DefaultAuditRetention is the default audit-log TTL (30 days).
 	DefaultAuditRetention = 30 * 24 * time.Hour
 )
@@ -36,17 +38,18 @@ const (
 
 // Config is the validated runtime configuration.
 type Config struct {
-	BaseURL    string
-	ListenAddr string
-	StateDir   string
-	SessionTTL time.Duration
-	OTP        OTPConfig
-	Ntfy       NtfyConfig
-	Audit      AuditConfig
-	Users      []string
-	Admins     []string
-	Upstreams  []UpstreamConfig
-	OAuth      OAuthConfig
+	BaseURL       string
+	ListenAddr    string
+	OpsListenAddr string
+	StateDir      string
+	SessionTTL    time.Duration
+	OTP           OTPConfig
+	Ntfy          NtfyConfig
+	Audit         AuditConfig
+	Users         []string
+	Admins        []string
+	Upstreams     []UpstreamConfig
+	OAuth         OAuthConfig
 }
 
 // OTPConfig holds the one-time-code gate tuning.
@@ -141,10 +144,11 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cfg := &Config{
-		BaseURL:    v.GetString("base_url"),
-		ListenAddr: v.GetString("listen_addr"),
-		StateDir:   v.GetString("state_dir"),
-		SessionTTL: v.GetDuration("session_ttl"),
+		BaseURL:       v.GetString("base_url"),
+		ListenAddr:    v.GetString("listen_addr"),
+		OpsListenAddr: v.GetString("ops_listen_addr"),
+		StateDir:      v.GetString("state_dir"),
+		SessionTTL:    v.GetDuration("session_ttl"),
 		OTP: OTPConfig{
 			Digits:        v.GetInt("otp.digits"),
 			Expiry:        v.GetDuration("otp.expiry"),
@@ -183,6 +187,7 @@ func Load(path string) (*Config, error) {
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("base_url", DefaultBaseURL)
 	v.SetDefault("listen_addr", DefaultListenAddr)
+	v.SetDefault("ops_listen_addr", DefaultOpsListenAddr)
 	v.SetDefault("state_dir", DefaultStateDir)
 	v.SetDefault("session_ttl", DefaultSessionTTL)
 	v.SetDefault("otp.digits", DefaultOTPDigits)
@@ -213,6 +218,9 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.ListenAddr) == "" {
 		errs = append(errs, errors.New("config: listen_addr must not be empty"))
+	}
+	if strings.TrimSpace(c.OpsListenAddr) == "" || c.OpsListenAddr == c.ListenAddr {
+		errs = append(errs, errors.New("config: ops_listen_addr must be set and differ from listen_addr"))
 	}
 	if strings.TrimSpace(c.StateDir) == "" {
 		errs = append(errs, errors.New("config: state_dir must not be empty"))

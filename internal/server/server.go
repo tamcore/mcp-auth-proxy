@@ -1,6 +1,7 @@
 // Package server wires the HTTP mux: /mcp and /mcp/{token} for MCP (bearer or
 // path auth), the /oauth endpoints of the client-facing AS, the signed
-// /approve/{id} and /deny/{id} button routes, and /metrics.
+// /approve/{id} and /deny/{id} button routes. /metrics, /healthz and /readyz
+// live on the separate ops listener.
 package server
 
 import (
@@ -33,6 +34,7 @@ type Server struct {
 	proxy    *mcpserver.Proxy
 	as       *oauthserver.Server
 	gate     *gate.Gate
+	store    *store.Store
 	metrics  *metrics.Metrics
 	webui    *webui.WebUI
 	pages    *ui.Renderer
@@ -42,6 +44,9 @@ type Server struct {
 // New builds the root handler's dependencies.
 func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 	proxy *mcpserver.Proxy, m *metrics.Metrics, signSecret []byte, logger *slog.Logger) (*Server, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	pages := ui.New(logger)
 	as, err := oauthserver.New(ctx, st, cfg, pages, logger)
 	if err != nil {
@@ -58,6 +63,7 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 		proxy:    proxy,
 		as:       as,
 		gate:     g,
+		store:    st,
 		metrics:  m,
 		webui:    web,
 		pages:    pages,
@@ -78,7 +84,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", s.handleApprove)
 	mux.HandleFunc("/deny/{id}", s.handleDeny)
-	mux.Handle("/metrics", s.metrics.Handler())
+	return mux
+}
+
+// OpsHandler serves the ops endpoints: /metrics, /healthz (process up) and
+// /readyz (database reachable).
+func (s *Server) OpsHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", s.metrics.Handler())
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.store.DB().PingContext(r.Context()); err != nil {
+			s.logger.Warn("readyz: database unreachable", "error", err)
+			http.Error(w, "database unreachable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ok\n"))
+	})
 	return mux
 }
 

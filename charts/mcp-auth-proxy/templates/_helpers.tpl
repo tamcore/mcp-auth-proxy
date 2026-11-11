@@ -46,6 +46,7 @@ Secrets (the ntfy topic) are deliberately excluded; they come from a Secret.
 {{- define "mcp-auth-proxy.configYAML" -}}
 base_url: {{ required "config.baseURL is required: approve/deny URLs and the MCP URL are built from it" .Values.config.baseURL | quote }}
 listen_addr: {{ .Values.config.listenAddr | quote }}
+ops_listen_addr: "0.0.0.0:9090"
 state_dir: /data
 session_ttl: {{ .Values.config.sessionTTL | quote }}
 {{- if not .Values.config.users }}{{ fail "config.users needs at least one user" }}{{ end }}

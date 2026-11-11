@@ -129,7 +129,8 @@ mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake
 
 HTTP routes: `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (path auth),
 `/oauth/authorize`, `/oauth/consent`, `/oauth/token`, `/approve/{id}?sig=`,
-`/deny/{id}?sig=`, `/metrics`.
+`/deny/{id}?sig=`, the web UI. The ops listener (`ops_listen_addr`) serves
+`/metrics`, `/healthz` and `/readyz` (database reachable) only; never expose it.
 
 ## Configuration reference
 
@@ -141,6 +142,7 @@ override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
 |-----|---------|---------|
 | `base_url` | `http://127.0.0.1:8080` | canonical public URL (button URLs, MCP URL) |
 | `listen_addr` | `127.0.0.1:8080` | HTTP listen address |
+| `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
 | `state_dir` | `./data` | holds `proxy.db` and `sign.secret` |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |

@@ -103,26 +103,42 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	errCh := make(chan error, 1)
-	go func() {
-		logger.Info("listening", "addr", cfg.ListenAddr, "base_url", cfg.BaseURL)
-		errCh <- httpSrv.ListenAndServe()
-	}()
+	app := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	ops := &http.Server{Addr: cfg.OpsListenAddr, Handler: srv.OpsHandler(), ReadHeaderTimeout: 10 * time.Second}
+	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)
+	return serveUntilDone(ctx, logger, app, ops)
+}
+
+// serveUntilDone runs the servers until ctx ends or one of them fails, then
+// shuts all of them down.
+func serveUntilDone(ctx context.Context, logger *slog.Logger, srvs ...*http.Server) error {
+	errCh := make(chan error, len(srvs))
+	for _, s := range srvs {
+		go func() {
+			logger.Info("listening", "addr", s.Addr)
+			errCh <- s.ListenAndServe()
+		}()
+	}
+	var errs []error
+	pending := len(srvs)
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		shutdownErr := httpSrv.Shutdown(shutdownCtx)
-		serveErr := <-errCh
-		if errors.Is(serveErr, http.ErrServerClosed) {
-			serveErr = nil
-		}
-		return errors.Join(shutdownErr, serveErr)
 	case err := <-errCh:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil // clean shutdown via signal
-		}
-		return err
+		pending--
+		errs = append(errs, err)
 	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, s := range srvs {
+		errs = append(errs, s.Shutdown(shutdownCtx))
+	}
+	for range pending {
+		errs = append(errs, <-errCh)
+	}
+	for i, err := range errs {
+		if errors.Is(err, http.ErrServerClosed) {
+			errs[i] = nil
+		}
+	}
+	return errors.Join(errs...)
 }

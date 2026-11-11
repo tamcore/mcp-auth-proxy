@@ -13,7 +13,7 @@ spec:
     matchLabels:
       {{- include "mcp-auth-proxy.selectorLabels" . | nindent 6 }}
   endpoints:
-    - port: http
+    - port: ops
       path: /metrics
       interval: {{ .Values.metrics.serviceMonitor.interval }}
 {{- end }}

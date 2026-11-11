@@ -60,6 +60,9 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            - name: ops
+              containerPort: 9090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}
@@ -85,14 +88,14 @@ spec:
           {{- end }}
           livenessProbe:
             httpGet:
-              path: /metrics
-              port: http
+              path: /healthz
+              port: ops
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /metrics
-              port: http
+              path: /readyz
+              port: ops
             initialDelaySeconds: 5
             periodSeconds: 10
       volumes:

@@ -22,11 +22,10 @@ serviceAccount:
 service:
   type: ClusterIP
   port: 8080
+  # Ops listener: /metrics, /healthz, /readyz. Never route it publicly; the
+  # httpRoute and ingress only target the http port.
+  opsPort: 9090
 
-# The proxy serves /mcp, /oauth/*, /approve, /deny and /metrics on the same
-# port. The metrics endpoint is unauthenticated but carries only aggregate
-# counters with a closed label vocabulary; keep the Service ClusterIP-only
-# unless the MCP endpoint itself is meant to be public.
 metrics:
   serviceMonitor:
     enabled: false

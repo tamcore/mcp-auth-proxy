@@ -39,6 +39,9 @@ func TestDefaults(t *testing.T) {
 	if cfg.ListenAddr != DefaultListenAddr {
 		t.Fatalf("listen addr default = %q", cfg.ListenAddr)
 	}
+	if cfg.OpsListenAddr != DefaultOpsListenAddr {
+		t.Fatalf("ops listen addr default = %q", cfg.OpsListenAddr)
+	}
 	if cfg.Ntfy.Enabled {
 		t.Fatal("ntfy must default to disabled")
 	}
@@ -85,6 +88,13 @@ state_dir: ./data
 upstreams: [{name: e, command: [x]}]
 oauth:
   clients: [{client_id: c, name: C}]
+`,
+		"ops listener on the app address": `
+base_url: http://x
+state_dir: ./data
+listen_addr: 127.0.0.1:8080
+ops_listen_addr: 127.0.0.1:8080
+upstreams: [{name: e, command: [x]}]
 `,
 		"bad otp digits": `
 base_url: http://x

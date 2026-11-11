@@ -99,3 +99,31 @@ func TestUnlinkRemovesOnlyOwnToken(t *testing.T) {
 		t.Fatalf("alice's token must stay: %v", err)
 	}
 }
+
+func TestStdioServersAreAdminOnly(t *testing.T) {
+	st, ts := newLinkUI(t, "https://idp/token")
+	add := func(cookie *http.Cookie) int {
+		form := url.Values{nameField: {"shell"}, "command": {"sh -c id"}}
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/upstream", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(cookie)
+		resp, err := noRedirectClient().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := add(login(t, ts, testBob, linkPw)); code != http.StatusForbidden {
+		t.Fatalf("non-admin stdio server: want 403, got %d", code)
+	}
+	if ups, _ := st.ListUserUpstreams(context.Background(), linkUserID); len(ups) != 0 {
+		t.Fatal("rejected stdio server must not be stored")
+	}
+	if strings.Contains(portalBody(t, ts, login(t, ts, testBob, linkPw)), `name="command"`) {
+		t.Fatal("non-admins must not see the stdio command field")
+	}
+	if code := add(login(t, ts, testAlice, linkPw)); code != http.StatusFound {
+		t.Fatalf("admin stdio server: want 302, got %d", code)
+	}
+}

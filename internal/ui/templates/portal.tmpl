@@ -115,10 +115,12 @@
       <label class="field-label" for="up-bearer">Bearer token <span class="muted">(optional, for URL)</span></label>
       <input class="field" id="up-bearer" type="password" name="bearer" autocomplete="off" placeholder="e.g. a long-lived access token">
     </div>
+    {{if $.User.Admin}}
     <div>
-      <label class="field-label" for="up-cmd">or stdio command</label>
+      <label class="field-label" for="up-cmd">or stdio command <span class="muted">(admins only; runs in the proxy)</span></label>
       <input class="field" id="up-cmd" type="text" name="command" placeholder="binary arg…">
     </div>
+    {{end}}
     <div class="sm:col-span-2"><button type="submit" class="btn">Add server</button></div>
   </form>
 </section>

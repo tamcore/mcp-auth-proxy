@@ -143,7 +143,7 @@ func (ui *WebUI) validateChosenUpstreams(ctx context.Context, user *store.User, 
 }
 
 func (ui *WebUI) ownUpstreamsCtx(ctx context.Context, userID string) []*store.UserUpstream {
-	ups, err := ui.store.ListUserUpstreams(ctx, userID)
+	ups, err := ui.store.RunnableUserUpstreams(ctx, userID)
 	if err != nil {
 		return nil
 	}
@@ -178,6 +178,10 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	bearer := strings.TrimSpace(r.PostForm.Get("bearer"))
 	if name == "" || (url == "") == (command == "") {
 		http.Error(w, "name and exactly one of url/command required", http.StatusBadRequest)
+		return
+	}
+	if command != "" && !user.Admin {
+		http.Error(w, "only admins may add stdio command servers", http.StatusForbidden)
 		return
 	}
 	if bearer != "" && url == "" {

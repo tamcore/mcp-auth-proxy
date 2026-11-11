@@ -69,6 +69,27 @@ SELECT id, user_id, name, url, command, headers, created_at FROM user_upstreams 
 	return out, rows.Err()
 }
 
+// RunnableUserUpstreams returns the user's upstreams the proxy may start:
+// stdio commands run only for admins, so a non-admin's command row (e.g.
+// after a demotion) is never executed.
+func (s *Store) RunnableUserUpstreams(ctx context.Context, userID string) ([]*UserUpstream, error) {
+	user, err := s.UserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.ListUserUpstreams(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*UserUpstream, 0, len(all))
+	for _, u := range all {
+		if len(u.Command) == 0 || user.Admin {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
 // DeleteUserUpstream removes one owned upstream. It fails if the id does not
 // belong to the user.
 func (s *Store) DeleteUserUpstream(ctx context.Context, userID, id string) error {

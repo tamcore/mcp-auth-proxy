@@ -158,7 +158,7 @@ func (p *Proxy) userCache(ctx context.Context, userID string) (map[string]*upstr
 	if ok {
 		return cache, nil
 	}
-	ups, err := p.store.ListUserUpstreams(ctx, userID)
+	ups, err := p.store.RunnableUserUpstreams(ctx, userID)
 	if err != nil {
 		return nil, err
 	}

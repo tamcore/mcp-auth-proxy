@@ -297,3 +297,38 @@ func TestDeleteUpstreamTokenOnlyForUser(t *testing.T) {
 		t.Fatalf("u_b token must stay: %v", err)
 	}
 }
+
+const runUser = "u_usr"
+
+func TestRunnableUserUpstreamsOnlyAdminsRunCommands(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	for _, u := range []*User{
+		{ID: "u_adm", Username: "adm", Admin: true, CreatedAt: now},
+		{ID: runUser, Username: "usr", CreatedAt: now},
+	} {
+		if err := st.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+		for _, up := range []*UserUpstream{
+			{ID: "us_cmd_" + u.ID, UserID: u.ID, Name: "cmd", Command: []string{"sh"}, CreatedAt: now},
+			{ID: "us_url_" + u.ID, UserID: u.ID, Name: "web", URL: "https://x/mcp", CreatedAt: now},
+		} {
+			if err := st.CreateUserUpstream(ctx, up); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for uid, want := range map[string]int{"u_adm": 2, runUser: 1} {
+		ups, err := st.RunnableUserUpstreams(ctx, uid)
+		if err != nil || len(ups) != want {
+			t.Fatalf("%s: want %d runnable, got %d (%v)", uid, want, len(ups), err)
+		}
+		for _, u := range ups {
+			if uid == runUser && len(u.Command) > 0 {
+				t.Fatal("non-admin stdio upstream must not be runnable")
+			}
+		}
+	}
+}

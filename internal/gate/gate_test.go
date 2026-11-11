@@ -284,3 +284,22 @@ func TestApproveURLShape(t *testing.T) {
 		t.Fatalf("deny url: %s", d)
 	}
 }
+
+func TestPendingCodeKeptInMemoryUntilExpiry(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	if _, err := e.gate.Block(ctx, e.key, "echo__echo"); err != nil {
+		t.Fatal(err)
+	}
+	ch := e.ntf.last()
+	if code, ok := e.gate.PendingCode(ch.ID); !ok || code != ch.PendingOTP {
+		t.Fatalf("pending code: %q %v", code, ok)
+	}
+	if _, ok := e.gate.PendingCode("unknown"); ok {
+		t.Fatal("unknown challenge must have no code")
+	}
+	e.advance(4 * time.Minute)
+	if _, ok := e.gate.PendingCode(ch.ID); ok {
+		t.Fatal("expired code must be gone")
+	}
+}

@@ -76,14 +76,11 @@ func runServe(cmd *cobra.Command) error {
 		logger.Warn("invite link for user without password (replaces earlier links)",
 			"user", name, "url", strings.TrimRight(cfg.BaseURL, "/")+"/invite/"+token)
 	}
+	if cfg.LegacyNtfy {
+		logger.Warn("config: the global ntfy block is ignored; every user sets their own push target in the portal")
+	}
 	gcAudit(st, cfg, logger)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	var pub ntfy.Publisher
-	if cfg.Ntfy.Enabled {
-		pub = ntfy.NewHTTPPublisher(cfg.Ntfy.URL, cfg.Ntfy.Token, httpClient, logger)
-	} else {
-		pub = ntfy.NewLogPublisher(logger)
-	}
 	g := gate.New(gate.Options{
 		Store:         st,
 		Digits:        cfg.OTP.Digits,
@@ -96,7 +93,7 @@ func runServe(cmd *cobra.Command) error {
 	})
 	m := metrics.New(nil)
 	g.OnChallenge = m.Challenge
-	g.SetNotifier(ntfy.NewNotifier(pub, cfg.Ntfy.Topic, g.ApproveURL, g.DenyURL))
+	g.SetNotifier(ntfy.NewUserNotifier(st, httpClient, logger, g.ApproveURL, g.DenyURL))
 	pool := upstream.NewPool(cfg.Upstreams, st, httpClient, logger)
 	proxy := mcpserver.New(mcpserver.Options{
 		Pool: pool, Store: st, Gate: g, Metrics: m, Logger: logger,

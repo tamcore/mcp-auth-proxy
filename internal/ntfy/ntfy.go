@@ -1,6 +1,6 @@
-// Package ntfy publishes the one-time-code challenge to the owner's phone via
-// ntfy, carrying Approve/Deny action buttons. When disabled it falls back to a
-// log-only publisher so the flow is still observable without a phone.
+// Package ntfy publishes the one-time-code challenge to the key owner's own
+// ntfy topic, carrying Approve/Deny action buttons. Keys without an owner fall
+// back to a log-only publisher.
 package ntfy
 
 import (
@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/tamcore/mcp-auth-proxy/internal/store"
 )
 
 // Action is one ntfy http action button.
@@ -104,35 +102,4 @@ func NewLogPublisher(logger *slog.Logger) *LogPublisher {
 func (p *LogPublisher) Publish(_ context.Context, m Message) error {
 	p.logger.Info("ntfy disabled: notification", "title", m.Title, "message", m.Message, "actions", m.Actions)
 	return nil
-}
-
-// Notifier adapts a Publisher to the gate.Notifier shape, building the push for
-// a challenge: the code in the message text plus Approve/Deny buttons.
-type Notifier struct {
-	pub       Publisher
-	topic     string
-	approveFn func(id string) string
-	denyFn    func(id string) string
-}
-
-// NewNotifier builds the gate notifier. approveFn/denyFn produce the signed
-// button URLs for a challenge id.
-func NewNotifier(pub Publisher, topic string, approveFn, denyFn func(id string) string) *Notifier {
-	return &Notifier{pub: pub, topic: topic, approveFn: approveFn, denyFn: denyFn}
-}
-
-// Notify sends the challenge push. The plaintext code rides only in this
-// message and in memory.
-func (n *Notifier) Notify(ctx context.Context, ch *store.Challenge, keyLabel string) error {
-	m := Message{
-		Title: "MCP auth request",
-		Message: fmt.Sprintf("Key %q wants to call tool %q. One-time code: %s (expires %s).",
-			keyLabel, ch.ToolName, ch.PendingOTP, ch.ExpiresAt.Format("15:04:05")),
-		Actions: []Action{
-			{Action: "http", Label: "Approve", Method: "POST", URL: n.approveFn(ch.ID), Clear: true},
-			{Action: "http", Label: "Deny", Method: "POST", URL: n.denyFn(ch.ID), Clear: true},
-		},
-	}
-	m.Topic = n.topic
-	return n.pub.Publish(ctx, m)
 }

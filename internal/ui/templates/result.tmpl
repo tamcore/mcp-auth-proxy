@@ -8,6 +8,7 @@
     </div>
     <h1 class="mb-2 text-xl font-semibold text-slate-900 dark:text-white">{{.Heading}}</h1>
     <p class="muted">{{.Message}}</p>
+    {{with .Back}}<p class="mt-5"><a href="{{.}}">Back to portal</a></p>{{end}}
   </div>
 </div>
 {{end}}{{end}}

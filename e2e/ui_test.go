@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/mxschmitt/playwright-go"
 )
 
@@ -167,7 +168,20 @@ func uiApproveFromPhone(t *testing.T, e *env, page playwright.Page, token string
 	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); res.IsError {
 		t.Fatalf("after approve: %q", textOf(res))
 	}
-	gotoPath(t, page, "/")
+	must(t, page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Back to portal"}).Click())
+	uiEndSession(t, page, sess)
+}
+
+// uiEndSession ends the laptop key's session in the portal; the next call is
+// gated again.
+func uiEndSession(t *testing.T, page playwright.Page, sess *mcp.ClientSession) {
+	t.Helper()
+	key := page.GetByTestId("key").Filter(playwright.LocatorFilterOptions{HasText: "laptop"})
+	must(t, key.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "End session"}).Click())
+	must(t, expect.Locator(key.GetByTestId("key-activity")).ToContainText("not authorized"))
+	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); !res.IsError {
+		t.Fatal("after End session the call must be gated again")
+	}
 }
 
 func TestUINonAdminAndConsent(t *testing.T) {

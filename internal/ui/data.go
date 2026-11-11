@@ -102,4 +102,6 @@ type ResultData struct {
 	Tone    string
 	Heading string
 	Message string
+	// Back is an optional link target shown as "Back to portal".
+	Back string
 }

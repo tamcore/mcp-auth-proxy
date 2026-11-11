@@ -66,6 +66,12 @@
             {{range .Upstreams}}<span class="badge">{{.}}</span>{{end}}
           </div>
           <p class="muted mt-1 text-xs" data-testid="key-activity">Last seen {{when .LastUsed}} · last success {{when .LastSuccess}}{{if not .Revoked}} · {{with .AuthorizedUntil}}authorized until {{when .}}{{else}}not authorized{{end}}{{end}}</p>
+          {{if and (not .Revoked) .AuthorizedUntil}}
+          <form method="post" action="/portal/key/end-session" class="mt-1">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button class="btn-ghost text-xs">End session</button>
+          </form>
+          {{end}}
           {{if not .Revoked}}
           {{$key := .}}
           <details class="mt-2">

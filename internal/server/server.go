@@ -183,6 +183,7 @@ func (s *Server) handleSignButton(w http.ResponseWriter, r *http.Request, approv
 		err = s.gate.Deny(r.Context(), id, sig)
 	}
 	status, res := signResult(approve, err)
+	res.Back = "/"
 	s.pages.Render(w, status, "result", ui.Page{Title: res.Heading, Data: res})
 }
 

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -233,5 +234,18 @@ func TestAuthenticatedRequestMarksKeyUsed(t *testing.T) {
 	got, err := srv.store.KeyByID(ctx, key.ID)
 	if err != nil || got.LastUsedAt == nil {
 		t.Fatalf("authenticated request must set last_used_at: %+v %v", got, err)
+	}
+}
+
+func TestApproveResultLinksBackToPortal(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Post(ts.URL+"/approve/x?sig=bad", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), `href="/"`) || !strings.Contains(string(body), "Back to portal") {
+		t.Fatal("result page must link back to the portal")
 	}
 }

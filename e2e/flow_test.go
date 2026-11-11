@@ -58,9 +58,6 @@ func TestBlockedContractAndNtfyPush(t *testing.T) {
 	}
 	e.ntfy.waitFor(t, 1)
 	m := e.ntfy.last()
-	if m["topic"] != "e2etopic" {
-		t.Fatalf("topic %v", m["topic"])
-	}
 	body, _ := m["message"].(string)
 	if !strings.Contains(body, "One-time code: ") {
 		t.Fatalf("push missing code: %q", body)

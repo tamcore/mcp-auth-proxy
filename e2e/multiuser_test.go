@@ -54,10 +54,6 @@ state_dir: %s
 session_ttl: 8h
 users: [alice, bob]
 admins: [alice]
-ntfy:
-  url: %s
-  topic: e2etopic
-  enabled: true
 upstreams:
   - name: echo
     command: [%q, dev-echo]
@@ -69,7 +65,7 @@ oauth:
     - client_id: e2e
       name: E2E Client
       redirect_uris: [http://127.0.0.1:1/cb]
-`, base, port, filepath.Join(dir, "state"), ntfy.srv.URL, binary, binary)
+`, base, port, filepath.Join(dir, "state"), binary, binary)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +142,7 @@ func setPasswordViaInvite(t *testing.T, inviteURL, pw string) *http.Cookie {
 func TestMultiUserPortalAndVisibility(t *testing.T) {
 	e, logs := startMultiUserEnv(t)
 	cookie := setPasswordViaInvite(t, inviteURL(t, logs, "alice"), "alice-password-1")
+	setPushTarget(t, e, cookie)
 	token := portalCreateKey(t, e, cookie, []string{"echo", "private"})
 	bobRejected(t, e, logs)
 	toolsAndAudit(t, e, cookie, token)
@@ -221,6 +218,9 @@ func toolsAndAudit(t *testing.T, e *env, cookie *http.Cookie, token string) {
 		t.Fatal("call must be blocked first")
 	}
 	e.ntfy.waitFor(t, 1)
+	if e.ntfy.last()["topic"] != "e2etopic" {
+		t.Fatalf("push must go to the user's own topic: %v", e.ntfy.last()["topic"])
+	}
 	if res := callTool(t, sess, "auth", map[string]any{"otp": lastCode(t, e.ntfy)}); res.IsError {
 		t.Fatalf("auth: %q", textOf(res))
 	}
@@ -254,5 +254,23 @@ func TestServeExitsCleanlyOnSIGINT(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("serve did not exit within 10s of SIGINT")
+	}
+}
+
+// setPushTarget points the user's pushes at the fake ntfy via the portal.
+func setPushTarget(t *testing.T, e *env, cookie *http.Cookie) {
+	t.Helper()
+	form := url.Values{"url": {e.ntfy.srv.URL}, "topic": {"e2etopic"}}
+	req, _ := http.NewRequest(http.MethodPost, e.base+"/portal/notify", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("set push target: %d", resp.StatusCode)
 	}
 }

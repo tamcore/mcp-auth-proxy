@@ -65,7 +65,7 @@ go build -o mcp-auth-proxy ./cmd/mcp-auth-proxy
 
 # 1. Configure (see config.example.yaml)
 cp config.example.yaml config.yaml
-$EDITOR config.yaml        # set base_url, state_dir, ntfy topic, upstreams
+$EDITOR config.yaml        # set base_url, state_dir, users, upstreams
 
 # 2. Run the proxy
 ./mcp-auth-proxy serve --config config.yaml
@@ -78,21 +78,17 @@ $EDITOR config.yaml        # set base_url, state_dir, ntfy topic, upstreams
 # 4. Point the AI client at the MCP URL (or use the Bearer header on /mcp)
 ```
 
-For push notifications, create an ntfy topic and set:
+Push notifications are per user. In the portal ("Push notifications") every
+user enters their own ntfy server, topic and optional access token. Saving
+checks that the URL is https (plain http only for loopback), that
+`/v1/health` reports a healthy ntfy server, and sends a test push. Without a
+push target, codes appear only in the portal. Keys created with the CLI have
+no owner; their codes and Approve/Deny URLs are logged. A failed publish is
+logged at WARN.
 
-```yaml
-ntfy:
-  url: https://ntfy.sh
-  topic: your-topic
-  enabled: true
-```
-
-If the server requires auth on the topic, set an access token via
-`MCP_PROXY_NTFY_TOKEN=tk_…` (sent as `Authorization: Bearer`). A rejected
-publish is logged at WARN with the HTTP status.
-
-With `enabled: false` the code and the Approve/Deny URLs are only logged, which
-is handy for local testing.
+Open requests are always listed at the top of the portal with their code and
+Approve/Deny buttons; the page reloads itself when requests appear or resolve.
+Approving in the portal is equivalent to the Approve button in the push.
 
 ## The OTP contract (what your AI client sees)
 
@@ -101,12 +97,13 @@ is handy for local testing.
 2. Without a live session the call returns an error-shaped result:
 
    > Blocked: tool "echo__echo" on key "claude-laptop" requires a one-time code.
-   > Ask the owner for the 5-digit code from the phone notification (expires …).
+   > Ask the owner for the 5-digit code from their phone notification or the web portal (expires …).
    > Then call the `auth` tool with that code (argument `otp`) and retry this
    > exact tool call.
 
 3. You get an ntfy push with the 5-digit code (3-minute expiry, 3 attempts) and
-   Approve/Deny buttons. A new blocked call within 30s does not push again.
+   Approve/Deny buttons; the portal shows the same request. A new blocked call
+   within 30s does not push again.
 4. The client calls `auth` with `{"otp": "12345"}`. On success:
 
    > Session authorized until 2025-01-01T20:00:00Z. Retry the tool call you were
@@ -128,7 +125,7 @@ mcp-auth-proxy key list
 mcp-auth-proxy key revoke <id>                # kills session + pending challenge
 mcp-auth-proxy upstream list|status
 mcp-auth-proxy upstream link <name>           # one-time OAuth linking flow
-mcp-auth-proxy doctor                         # config/state/secret/ntfy checks
+mcp-auth-proxy doctor                         # config/state/secret/upstream/user checks
 mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake upstream)
 ```
 
@@ -143,7 +140,7 @@ line per request (credential path segments redacted, no query string) and one
 
 See [config.example.yaml](config.example.yaml). Every key has an environment
 override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
-`MCP_PROXY_NTFY_TOPIC=…`).
+`MCP_PROXY_OTP_DIGITS=6`).
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -153,7 +150,6 @@ override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
 | `state_dir` | `./data` | holds `proxy.db` and `sign.secret` |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
-| `ntfy.url` / `topic` / `enabled` | `https://ntfy.sh` / – / `false` | push settings |
 | `upstreams[]` | – | `name` + exactly one of `url` / `command`, optional `headers`, `oauth` |
 | `oauth.token_ttl` | `24h` | `map_` access token lifetime (no refresh tokens in v1) |
 | `oauth.authorize_code_ttl` | `10m` | single-use authorization code lifetime |
@@ -163,17 +159,16 @@ override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
 
 A Helm chart is in [charts/mcp-auth-proxy](charts/mcp-auth-proxy): a
 single-replica `Recreate` deployment (one SQLite database, one signing secret)
-with a PVC for `/data`, the config in a ConfigMap, and the ntfy topic in a
-Secret. Released charts are published to `oci://ghcr.io/tamcore/charts`.
+with a PVC for `/data` and the config in a ConfigMap. Released charts are
+published to `oci://ghcr.io/tamcore/charts`.
 
 ```sh
 helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
   --set config.baseURL=https://mcp.example.com \
-  --set 'config.users[0]=alice' --set 'config.admins[0]=alice' \
-  --set ntfy.enabled=true --set ntfy.topic=your-topic
+  --set 'config.users[0]=alice' --set 'config.admins[0]=alice'
 ```
 
-The image trusts only public CAs. If ntfy or an upstream uses a private CA,
+The image trusts only public CAs. If a user's ntfy server or an upstream uses a private CA,
 pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the
 system roots via `SSL_CERT_DIR`).
 

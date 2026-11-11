@@ -41,7 +41,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 The proxy configuration as the YAML document MCP_PROXY_CONFIG points at.
-Secrets (the ntfy topic) are deliberately excluded; they come from a Secret.
+Push targets are per user and live in the database, not here.
 */}}
 {{- define "mcp-auth-proxy.configYAML" -}}
 base_url: {{ required "config.baseURL is required: approve/deny URLs and the MCP URL are built from it" .Values.config.baseURL | quote }}
@@ -56,7 +56,4 @@ audit: {{ .Values.config.audit | toJson }}
 upstreams: {{ .Values.config.upstreams | toJson }}
 oauth:
   clients: {{ .Values.config.oauthClients | toJson }}
-ntfy:
-  enabled: {{ .Values.ntfy.enabled }}
-  url: {{ .Values.ntfy.url | quote }}
 {{- end }}

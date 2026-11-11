@@ -5,6 +5,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -42,28 +43,68 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// fakeNtfy captures published messages.
+// challengeTitle marks a challenge push (test pushes are not recorded).
+const challengeTitle = "MCP auth request"
+
+// fakeNtfy captures challenge pushes: published to its HTTP server by keys
+// whose owner set it as push target, or written to the proxy log (it is an
+// io.Writer for the subprocess stdout) for keys without an owner.
 type fakeNtfy struct {
-	srv  *httptest.Server
-	mu   sync.Mutex
-	msgs []map[string]any
+	srv     *httptest.Server
+	mu      sync.Mutex
+	msgs    []map[string]any
+	partial []byte
 }
 
 func newFakeNtfy(t *testing.T) *fakeNtfy {
 	t.Helper()
 	f := &fakeNtfy{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/health" {
+			_, _ = w.Write([]byte(`{"healthy":true}`))
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		var m map[string]any
 		if err := json.Unmarshal(body, &m); err == nil {
-			f.mu.Lock()
-			f.msgs = append(f.msgs, m)
-			f.mu.Unlock()
+			f.record(m)
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+func (f *fakeNtfy) record(m map[string]any) {
+	if m["title"] != challengeTitle {
+		return
+	}
+	f.mu.Lock()
+	f.msgs = append(f.msgs, m)
+	f.mu.Unlock()
+}
+
+// Write parses the proxy's JSON log and records log-only notifications.
+func (f *fakeNtfy) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	f.partial = append(f.partial, p...)
+	var lines [][]byte
+	for {
+		i := bytes.IndexByte(f.partial, '\n')
+		if i < 0 {
+			break
+		}
+		lines = append(lines, append([]byte(nil), f.partial[:i]...))
+		f.partial = f.partial[i+1:]
+	}
+	f.mu.Unlock()
+	for _, line := range lines {
+		var m map[string]any
+		if json.Unmarshal(line, &m) == nil && m["msg"] == "notification (log only)" {
+			f.record(m)
+		}
+	}
+	return len(p), nil
 }
 
 func (f *fakeNtfy) count() int {
@@ -153,18 +194,15 @@ listen_addr: 127.0.0.1:%d
 ops_listen_addr: 127.0.0.1:0
 state_dir: %s
 session_ttl: 8h
-ntfy:
-  url: %s
-  topic: e2etopic
-  enabled: true
 upstreams:
   - name: echo
     command: [%q, dev-echo]
-`, base, port, state, ntfy.srv.URL, binary)
+`, base, port, state, binary)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(binary, "serve", "--config", cfgPath)
+	cmd.Stdout = ntfy
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

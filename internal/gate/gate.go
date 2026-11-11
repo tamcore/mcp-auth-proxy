@@ -324,11 +324,11 @@ func (g *Gate) genOTP() (string, error) {
 // marks the variant used when the notification may not have been delivered.
 func blockedMessage(keyLabel, toolName string, digits int, expires time.Time, pushFailed bool) string {
 	msg := fmt.Sprintf("Blocked: tool %q on key %q requires a one-time code. "+
-		"Ask the owner for the %d-digit code from the phone notification (expires %s). "+
+		"Ask the owner for the %d-digit code from their phone notification or the web portal (expires %s). "+
 		"Then call the `auth` tool with that code (argument `otp`) and retry this exact tool call.",
 		toolName, keyLabel, digits, expires.Format(time.RFC3339))
 	if pushFailed {
-		msg += " The phone notification may have failed to send."
+		msg += " No phone notification went out; the owner finds the code in the web portal."
 	}
 	return msg
 }

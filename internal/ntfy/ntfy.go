@@ -100,6 +100,6 @@ func NewLogPublisher(logger *slog.Logger) *LogPublisher {
 
 // Publish logs the message.
 func (p *LogPublisher) Publish(_ context.Context, m Message) error {
-	p.logger.Info("ntfy disabled: notification", "title", m.Title, "message", m.Message, "actions", m.Actions)
+	p.logger.Info("notification (log only)", "title", m.Title, "message", m.Message, "actions", m.Actions)
 	return nil
 }

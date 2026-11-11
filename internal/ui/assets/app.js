@@ -58,8 +58,28 @@
     setTimeout(() => (el.textContent = old), 1500);
   };
 
+  // Reload when pending requests appear or resolve, unless the user is busy.
+  const watchPending = () => {
+    if (!document.querySelector("[data-pending-watch]")) return;
+    const shown = () =>
+      [...document.querySelectorAll("[data-pending-id]")].map((e) => e.dataset.pendingId).sort().join();
+    setInterval(async () => {
+      const busy =
+        document.activeElement?.matches("input, textarea, select") ||
+        document.querySelector("details[open], dialog[open]");
+      if (busy || document.hidden) return;
+      try {
+        const res = await fetch("/portal/pending");
+        if (!res.ok) return;
+        const { ids } = await res.json();
+        if (ids.sort().join() !== shown()) location.reload();
+      } catch {}
+    }, 5000);
+  };
+
   apply();
   system.addEventListener("change", apply);
+  document.addEventListener("DOMContentLoaded", watchPending);
   document.addEventListener("DOMContentLoaded", apply);
   document.addEventListener("click", (e) => {
     const set = e.target.closest("[data-theme-set]");

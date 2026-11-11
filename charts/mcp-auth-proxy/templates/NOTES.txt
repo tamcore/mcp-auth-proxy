@@ -12,7 +12,6 @@ Create a client key inside the pod:
 WARNING: ingress and httpRoute are disabled, so the origin above does not resolve to this
 Service from outside the cluster.
 {{- end }}
-{{- if not .Values.ntfy.enabled }}
 
-WARNING: ntfy is disabled, so one-time codes are only written to the pod log.
-{{- end }}
+Every user sets their own ntfy push target in the portal; until then their
+one-time codes appear only in the portal.

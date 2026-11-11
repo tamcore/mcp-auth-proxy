@@ -141,7 +141,7 @@ func TestBlockPushFailureVariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(msg, "may have failed") {
+	if !strings.Contains(msg, "No phone notification went out") {
 		t.Fatalf("want push-failure variant, got: %s", msg)
 	}
 }

@@ -7,6 +7,26 @@
 {{end}}
 {{define "content"}}{{with .Data}}
 {{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
+<div data-pending-watch hidden></div>
+{{if .Pending}}
+<section class="card border-amber-300 ring-4 ring-amber-500/10 dark:border-amber-400/40" aria-labelledby="pending" data-testid="pending">
+  <h2 id="pending" class="card-title">Pending authorization requests</h2>
+  <p class="muted mb-4">An AI client is waiting. Approve here, or give it the code. Approving grants the key a session.</p>
+  <ul class="divide-y divide-slate-200 dark:divide-slate-700">
+    {{range .Pending}}
+    <li class="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0" data-pending-id="{{.ID}}">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-2"><strong>{{.Key}}</strong><span class="badge-accent">{{.Tool}}</span></div>
+        <p class="muted mt-1 text-xs">expires {{when .Expires}}</p>
+      </div>
+      {{if .Code}}<code class="mono text-lg tracking-widest" data-testid="pending-code">{{.Code}}</code>{{else}}<span class="muted text-xs">code in the notification</span>{{end}}
+      <form method="post" action="{{.ApproveURL}}"><button class="btn">Approve</button></form>
+      <form method="post" action="{{.DenyURL}}"><button class="btn-danger">Deny</button></form>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
 {{if .NewToken}}
 <section class="card border-teal-300 ring-4 ring-teal-500/10 dark:border-teal-400/40" aria-labelledby="newkey" data-testid="new-key">
   <h2 id="newkey" class="card-title">New key, copy it now</h2>
@@ -166,6 +186,35 @@
   <p class="muted px-5 pt-4" data-tools-status></p>
   <ul class="max-h-[60vh] space-y-3 overflow-y-auto px-5 py-4" data-tools-list></ul>
 </dialog>
+
+<section class="card" aria-labelledby="notify">
+  <h2 id="notify" class="card-title">Push notifications</h2>
+  {{if .NotifyURL}}
+  <p class="mb-4 text-sm">Codes for your keys go to <code class="mono">{{.NotifyURL}}</code>. Leave topic and token empty to keep them.</p>
+  {{else}}
+  <p class="alert-error mb-4">No push target set. Codes for your keys only appear on this page.</p>
+  {{end}}
+  <form method="post" action="/portal/notify" class="grid gap-4 sm:grid-cols-3">
+    <div>
+      <label class="field-label" for="ntfy-url">ntfy server</label>
+      <input class="field" id="ntfy-url" type="url" name="url" required value="{{or .NotifyURL "https://ntfy.sh"}}">
+    </div>
+    <div>
+      <label class="field-label" for="ntfy-topic">Topic</label>
+      <input class="field" id="ntfy-topic" type="password" name="topic" autocomplete="off" {{if not .NotifyURL}}required{{end}} placeholder="{{if .NotifyURL}}unchanged{{else}}your-private-topic{{end}}">
+    </div>
+    <div>
+      <label class="field-label" for="ntfy-token">Access token <span class="muted">(optional)</span></label>
+      <input class="field" id="ntfy-token" type="password" name="token" autocomplete="off" placeholder="{{if .NotifyURL}}unchanged{{else}}tk_…{{end}}">
+    </div>
+    <div class="flex flex-wrap gap-2 sm:col-span-3">
+      <button type="submit" class="btn">Save and send test push</button>
+    </div>
+  </form>
+  {{if .NotifyURL}}
+  <form method="post" action="/portal/notify/delete" class="mt-3"><button class="btn-ghost">Remove push target</button></form>
+  {{end}}
+</section>
 
 <section class="card" aria-labelledby="oauth">
   <h2 id="oauth" class="card-title">Connect an OAuth client</h2>

@@ -76,6 +76,7 @@ func (ui *WebUI) renderPortalStatus(w http.ResponseWriter, r *http.Request, user
 	}
 	data := portalData(globals, ui.ownUpstreams(r, user.ID), ui.ownKeys(r, user.ID), ui.cfg, newToken, linked)
 	data.Error = errMsg
+	ui.notifyAndPending(r, user, &data)
 	now := time.Now().UTC()
 	for i := range data.Keys {
 		if sess, err := ui.store.GetSession(r.Context(), data.Keys[i].ID, now); err == nil {

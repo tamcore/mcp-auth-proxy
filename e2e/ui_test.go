@@ -85,6 +85,7 @@ func TestUIPortalFlow(t *testing.T) {
 	})
 	uiAcceptInvite(t, page, logs, "alice")
 	must(t, expect.Locator(page.GetByRole("link", playwright.PageGetByRoleOptions{Name: "Admin"})).ToBeVisible())
+	uiSetPushTarget(t, e, page)
 
 	must(t, page.Locator("#label").Fill("laptop"))
 	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Create key"}).Click())
@@ -137,16 +138,31 @@ func TestUIPortalFlow(t *testing.T) {
 	must(t, expect.Locator(page.GetByTestId("new-invite")).ToContainText("/invite/"))
 }
 
-// uiApproveFromPhone triggers a blocked call and opens the ntfy Approve link
-// in the browser, as the owner would on the phone.
+// uiSetPushTarget saves the fake ntfy as push target through the portal form.
+func uiSetPushTarget(t *testing.T, e *env, page playwright.Page) {
+	t.Helper()
+	must(t, expect.Locator(page.GetByText("No push target set")).ToBeVisible())
+	must(t, page.Locator("#ntfy-url").Fill(e.ntfy.srv.URL))
+	must(t, page.Locator("#ntfy-topic").Fill("e2etopic"))
+	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Save and send test push"}).Click())
+	must(t, expect.Locator(page.GetByText("Codes for your keys go to")).ToBeVisible())
+}
+
+// uiApproveFromPhone triggers a blocked call, checks the push and the portal's
+// pending card (same code), and approves it there.
 func uiApproveFromPhone(t *testing.T, e *env, page playwright.Page, token string) {
 	t.Helper()
+	gotoPath(t, page, "/")
 	sess := e.mcpClient(t, token)
 	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); !res.IsError {
 		t.Fatal("first call must be blocked")
 	}
 	e.ntfy.waitFor(t, 1)
-	gotoPath(t, page, actionURL(t, e.ntfy, "Approve"))
+	pending := page.GetByTestId("pending")
+	// No navigation: the portal's poll must reload the page by itself.
+	must(t, expect.Locator(pending.GetByTestId("pending-code")).ToHaveText(lastCode(t, e.ntfy),
+		playwright.LocatorAssertionsToHaveTextOptions{Timeout: playwright.Float(12000)}))
+	must(t, pending.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Approve"}).Click())
 	must(t, expect.Locator(page.GetByTestId("result")).ToHaveAttribute("data-tone", "ok"))
 	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); res.IsError {
 		t.Fatalf("after approve: %q", textOf(res))

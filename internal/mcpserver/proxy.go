@@ -275,7 +275,7 @@ var authInputSchema = map[string]any{
 			"type":        "string",
 			"minLength":   3,
 			"maxLength":   8,
-			"description": "The one-time code from the phone notification",
+			"description": "The one-time code from the owner's phone notification or web portal",
 		},
 	},
 	"required":             []string{"otp"},
@@ -285,7 +285,7 @@ var authInputSchema = map[string]any{
 func (p *Proxy) addAuthTool(srv *mcp.Server, key *store.Key) {
 	srv.AddTool(&mcp.Tool{
 		Name: AuthToolName,
-		Description: "Authorize this session with the one-time code from the phone notification. " +
+		Description: "Authorize this session with the one-time code from the owner's phone notification or web portal. " +
 			"After success, retry the tool call you were blocked on.",
 		InputSchema: authInputSchema,
 	}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -326,7 +326,8 @@ func (p *Proxy) callAuth(ctx context.Context, key *store.Key, otp string) (*mcp.
 func authFailureMessage(err error) string {
 	switch {
 	case errors.Is(err, gate.ErrWrongCode):
-		return "Wrong one-time code. Ask the owner for the current code from the phone notification and call `auth` again."
+		return "Wrong one-time code. Ask the owner for the current code (phone notification or web portal) " +
+			"and call `auth` again."
 	case errors.Is(err, gate.ErrExhausted):
 		return "No attempts left for this code. Retry the blocked tool call to receive a fresh code."
 	case errors.Is(err, gate.ErrExpired):

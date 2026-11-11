@@ -1,3 +1,10 @@
+{{define "copyrow"}}
+    <div class="flex flex-wrap items-center gap-2">
+      <dt class="w-24 font-medium">{{index . 0}}</dt>
+      <dd class="flex min-w-0 flex-1 items-center gap-2"><code class="mono min-w-0 flex-1"{{if eq (index . 0) "Token"}} data-testid="token"{{end}}>{{index . 1}}</code>
+        <button type="button" class="btn-ghost" data-copy="{{index . 1}}">Copy</button></dd>
+    </div>
+{{end}}
 {{define "content"}}{{with .Data}}
 {{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
 {{if .NewToken}}
@@ -5,16 +12,19 @@
   <h2 id="newkey" class="card-title">New key, copy it now</h2>
   <p class="muted mb-4">The token is shown only once.</p>
   <dl class="space-y-3 text-sm">
-    <div class="flex flex-wrap items-center gap-2">
-      <dt class="w-20 font-medium">Token</dt>
-      <dd class="flex min-w-0 flex-1 items-center gap-2"><code class="mono min-w-0 flex-1" data-testid="token">{{.NewToken}}</code>
-        <button type="button" class="btn-ghost" data-copy="{{.NewToken}}">Copy</button></dd>
-    </div>
-    <div class="flex flex-wrap items-center gap-2">
-      <dt class="w-20 font-medium">MCP URL</dt>
-      <dd class="flex min-w-0 flex-1 items-center gap-2"><code class="mono min-w-0 flex-1">{{.MCPURL}}</code>
-        <button type="button" class="btn-ghost" data-copy="{{.MCPURL}}">Copy</button></dd>
-    </div>
+    {{template "copyrow" (list "Token" .NewToken)}}
+  </dl>
+  <h3 class="mt-5 mb-2 text-sm font-semibold">Recommended: endpoint + header</h3>
+  <p class="muted mb-3">The token goes in the <code class="font-mono">Authorization</code> header; the endpoint is the same for every key.</p>
+  <dl class="space-y-3 text-sm">
+    {{template "copyrow" (list "Endpoint" .MCPEndpoint)}}
+    {{template "copyrow" (list "Header" (printf "Authorization: Bearer %s" .NewToken))}}
+    {{template "copyrow" (list "Claude Code" (printf "claude mcp add --transport http mcp-auth-proxy %s --header \"Authorization: Bearer %s\"" .MCPEndpoint .NewToken))}}
+  </dl>
+  <h3 class="mt-5 mb-2 text-sm font-semibold">Only for clients that accept just a URL</h3>
+  <p class="muted mb-3">The token is part of this URL, so it can end up in proxy logs and browser history. Prefer the endpoint + header above.</p>
+  <dl class="space-y-3 text-sm">
+    {{template "copyrow" (list "URL" .MCPURL)}}
   </dl>
 </section>
 {{end}}

@@ -179,6 +179,7 @@ func TestPortalKeyCreateVisibilityAndAudit(t *testing.T) {
 	if !strings.Contains(string(body), "mak_") {
 		t.Fatalf("token not shown once: %d", resp.StatusCode)
 	}
+	assertNewKeyBanner(t, string(body))
 	keys, err := st.ListKeys(context.Background())
 	if err != nil || len(keys) != 1 || keys[0].UserID == nil || *keys[0].UserID != alice.ID {
 		t.Fatalf("key not bound to alice: %v %v", keys, err)
@@ -420,5 +421,16 @@ func adminFlow(t *testing.T, ts *httptest.Server, st *store.Store, ctx context.C
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("disabled login must be 401: %d", resp.StatusCode)
+	}
+}
+
+// assertNewKeyBanner checks that the endpoint + header form is offered first.
+func assertNewKeyBanner(t *testing.T, body string) {
+	t.Helper()
+	for _, want := range []string{`data-copy="http://proxy.local/mcp"`, "Authorization: Bearer mak_",
+		"claude mcp add --transport http", "Only for clients that accept just a URL"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("new-key banner missing %q", want)
+		}
 	}
 }

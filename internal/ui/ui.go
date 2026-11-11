@@ -70,6 +70,7 @@ func New(logger *slog.Logger) *Renderer {
 		"asset":  func(name string) string { return "/static/" + name + "?v=" + versions[name] },
 		"themes": func() []string { return []string{"auto", "light", "dark"} },
 		"has":    slices.Contains[[]string],
+		"list":   func(v ...string) []string { return v },
 		"when": func(t *time.Time) string {
 			if t == nil {
 				return "never"

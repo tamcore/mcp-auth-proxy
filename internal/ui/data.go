@@ -44,6 +44,7 @@ type Key struct {
 type PortalData struct {
 	Error        string
 	NewToken     string
+	MCPEndpoint  string
 	MCPURL       string
 	Servers      []Server
 	Keys         []Key

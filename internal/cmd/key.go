@@ -101,15 +101,17 @@ func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, user
 	if err := st.CreateKey(cmd.Context(), key); err != nil {
 		return err
 	}
-	mcpURL := strings.TrimRight(cfg.BaseURL, "/") + "/mcp/" + token
+	endpoint := strings.TrimRight(cfg.BaseURL, "/") + "/mcp"
+	mcpURL := endpoint + "/" + token
 	out := map[string]string{
-		"id":          key.ID,
-		"label":       key.Label,
-		"token":       token,
-		"mcp_url":     mcpURL,
-		"bearer":      "Authorization: Bearer " + token,
-		"upstreams":   strings.Join(names, ","),
-		"session_ttl": ttl.String(),
+		"id":           key.ID,
+		"label":        key.Label,
+		"token":        token,
+		"mcp_endpoint": endpoint,
+		"mcp_url":      mcpURL,
+		"bearer":       "Authorization: Bearer " + token,
+		"upstreams":    strings.Join(names, ","),
+		"session_ttl":  ttl.String(),
 	}
 	if asJSON {
 		enc := json.NewEncoder(cmd.OutOrStdout())
@@ -118,8 +120,9 @@ func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, user
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created key %s (%s)\n", key.ID, key.Label)
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Token (shown once): %s\n", token)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "MCP URL:           %s\n", mcpURL)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Bearer:            Authorization: Bearer %s\n", token)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "MCP endpoint:      %s   (recommended, with the header below)\n", endpoint)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Header:            Authorization: Bearer %s\n", token)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "URL-only clients:  %s   (token in the URL; may end up in logs)\n", mcpURL)
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Upstreams:         %s\n", strings.Join(names, ","))
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Session TTL:       %s\n", ttl)
 	return nil

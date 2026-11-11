@@ -35,6 +35,7 @@ jobs:
             --set 'config.upstreams[0].command[1]=dev-echo' \
             --set ntfy.enabled=true --set ntfy.topic=testtopic --set ntfy.token=tk_test \
             --set metrics.serviceMonitor.enabled=true \
+            --set-string extraCACerts=dummy-pem \
             --set ingress.enabled=true \
             --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw' \
             --set 'httpRoute.hostnames[0]=mcp.example' > /dev/null

@@ -166,8 +166,13 @@ Secret. Released charts are published to `oci://ghcr.io/tamcore/charts`.
 ```sh
 helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
   --set config.baseURL=https://mcp.example.com \
+  --set 'config.users[0]=alice' --set 'config.admins[0]=alice' \
   --set ntfy.enabled=true --set ntfy.topic=your-topic
 ```
+
+The image trusts only public CAs. If ntfy or an upstream uses a private CA,
+pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the
+system roots via `SSL_CERT_DIR`).
 
 ## Development
 

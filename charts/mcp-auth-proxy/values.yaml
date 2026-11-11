@@ -102,6 +102,10 @@ httpRoute:
   #     sectionName: https
   hostnames: []
 
+# Extra CA certificates (PEM) trusted for outgoing TLS to ntfy and upstreams,
+# e.g. a private root CA. Added to the system roots, not replacing them.
+extraCACerts: ""
+
 resources: {}
 #   requests: {cpu: 10m, memory: 32Mi}
 #   limits: {memory: 128Mi}

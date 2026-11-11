@@ -108,8 +108,10 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # No --with-deps: the runner image already has Chrome's shared libraries,
+      # and apt mirrors are a frequent source of flakes.
       - name: Install Chromium for playwright-go
-        run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps --only-shell chromium
+        run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --only-shell chromium
 
       - name: E2E tests (with -race)
         run: go test -race -tags e2e -count=1 -timeout 300s ./e2e/

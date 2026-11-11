@@ -58,6 +58,9 @@ func runServe(cmd *cobra.Command) error {
 		return err
 	}
 	defer func() { _ = st.Close() }()
+	for _, m := range st.MigrationsApplied() {
+		logger.Info("migration applied", "migration", m, "backup", st.MigrationBackup())
+	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		return err
 	}

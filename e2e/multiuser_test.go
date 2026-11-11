@@ -150,7 +150,8 @@ func TestMultiUserPortalAndVisibility(t *testing.T) {
 	bobRejected(t, e, logs)
 	toolsAndAudit(t, e, cookie, token)
 	out := logs.String()
-	for _, want := range []string{`"msg":"http request"`, `"path":"/mcp/[redacted]"`, `"msg":"tool call"`} {
+	for _, want := range []string{`"msg":"http request"`, `"path":"/mcp/[redacted]"`, `"msg":"tool call"`,
+		`"msg":"migration applied","migration":"0009_audit_keeps_deleted_keys"`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("stdout log missing %s", want)
 		}

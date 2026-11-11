@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -32,7 +33,10 @@ var (
 
 // Store wraps the SQLite handle. All methods take a context.
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	path     string
+	migrated []string
+	snapshot string
 }
 
 // Open opens (and creates if needed) the database at path, applies pending
@@ -47,13 +51,20 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("store: open: %w", err)
 	}
 	db.SetMaxOpenConns(1) // SQLite serializes writers; one conn avoids SQLITE_BUSY
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err := s.Migrate(ctx, migrations.FS()); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
 }
+
+// MigrationsApplied names the migrations the last Migrate applied, e.g.
+// "0008_key_activity", so the caller can log them.
+func (s *Store) MigrationsApplied() []string { return s.migrated }
+
+// MigrationBackup is the snapshot taken before the last Migrate, if any.
+func (s *Store) MigrationBackup() string { return s.snapshot }
 
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
@@ -146,13 +157,37 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 	if latest > len(ms) {
 		return ErrTooNew
 	}
+	s.migrated = nil
 	for _, m := range ms {
 		if m.Version <= latest {
 			continue
 		}
+		if len(s.migrated) == 0 && latest > 0 {
+			if err := s.backup(ctx, m.Version); err != nil {
+				return err
+			}
+		}
 		if err := s.apply(ctx, m); err != nil {
 			return err
 		}
+		s.migrated = append(s.migrated, fmt.Sprintf("%04d_%s", m.Version, m.Name))
+	}
+	return nil
+}
+
+// backup snapshots an existing database before it is migrated to version.
+// ponytail: one file per upgrade is kept; prune by hand if the volume fills.
+func (s *Store) backup(ctx context.Context, version int) error {
+	if s.path == "" {
+		return nil
+	}
+	dst := fmt.Sprintf("%s.pre-v%04d.bak", s.path, version)
+	s.snapshot = dst
+	if _, err := os.Stat(dst); err == nil {
+		return nil // an earlier, failed attempt already took the snapshot
+	}
+	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
+		return fmt.Errorf("store: backup before migration %04d: %w", version, err)
 	}
 	return nil
 }

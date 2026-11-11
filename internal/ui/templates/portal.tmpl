@@ -35,6 +35,24 @@
             <code class="muted font-mono text-xs">{{.ID}} · {{.Kind}}</code>
             {{range .Upstreams}}<span class="badge">{{.}}</span>{{end}}
           </div>
+          <p class="muted mt-1 text-xs" data-testid="key-activity">Last seen {{when .LastUsed}} · last success {{when .LastSuccess}}</p>
+          {{if not .Revoked}}
+          {{$key := .}}
+          <details class="mt-2">
+            <summary class="cursor-pointer text-sm text-teal-700 dark:text-teal-300">Edit servers</summary>
+            <form method="post" action="/portal/key/upstreams" class="mt-2 space-y-2">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <div class="flex flex-wrap gap-2">
+                {{range $.Data.Servers}}
+                <label class="badge cursor-pointer has-checked:bg-teal-50 has-checked:text-teal-800 has-checked:ring-1 has-checked:ring-teal-300 dark:has-checked:bg-teal-400/10 dark:has-checked:text-teal-200 dark:has-checked:ring-teal-400/40">
+                  <input type="checkbox" name="upstream" value="{{.Name}}" {{if has $key.Upstreams .Name}}checked{{end}} class="accent-teal-700 dark:accent-teal-400"> {{.Name}}
+                </label>
+                {{end}}
+              </div>
+              <button type="submit" class="btn-ghost">Save servers</button>
+            </form>
+          </details>
+          {{end}}
         </div>
         {{if not .Revoked}}
         <form method="post" action="/portal/key/revoke">

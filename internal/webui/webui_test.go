@@ -152,7 +152,7 @@ func TestPortalKeyCreateVisibilityAndAudit(t *testing.T) {
 	cookie := login(t, ts, testAlice, "pw-alice")
 
 	// create a key choosing an upstream bob-only/private not allowed: "private" IS alice's; use a bogus one
-	form := url.Values{"label": {testClaude}, "upstream": {testEcho, "bogus"}}
+	form := url.Values{"label": {testClaude}, upstreamField: {testEcho, "bogus"}}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/key", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)
@@ -166,7 +166,7 @@ func TestPortalKeyCreateVisibilityAndAudit(t *testing.T) {
 	}
 
 	// valid creation shows the token once
-	form = url.Values{"label": {testClaude}, "upstream": {testEcho}}
+	form = url.Values{"label": {testClaude}, upstreamField: {testEcho}}
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/portal/key", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)

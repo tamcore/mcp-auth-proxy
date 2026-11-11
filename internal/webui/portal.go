@@ -92,7 +92,7 @@ func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	if label == "" {
 		label = user.Username + " client"
 	}
-	names, err := ui.validateChosenUpstreams(r.Context(), user, r.PostForm["upstream"])
+	names, err := ui.validateChosenUpstreams(r.Context(), user, r.PostForm[upstreamField])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -164,6 +164,35 @@ func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
 	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// handleKeyUpstreams replaces the MCP servers of one of the user's keys.
+func (ui *WebUI) handleKeyUpstreams(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "unreadable form", http.StatusBadRequest)
+		return
+	}
+	key, err := ui.store.KeyByID(r.Context(), r.PostForm.Get("id"))
+	if err != nil || key.UserID == nil || *key.UserID != user.ID || key.Revoked() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	names, err := ui.validateChosenUpstreams(r.Context(), user, r.PostForm[upstreamField])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ui.store.UpdateKeyUpstreams(r.Context(), key.ID, user.ID, names); err != nil {
+		ui.logger.Error("update key upstreams", "key", key.ID, "error", err)
+		http.Error(w, "could not update key", http.StatusInternalServerError)
+		return
+	}
+	ui.logger.Info("key upstreams updated", "key", key.ID, "user", user.Username, "upstreams", names)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {

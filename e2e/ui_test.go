@@ -104,6 +104,11 @@ func TestUIPortalFlow(t *testing.T) {
 	uiApproveFromPhone(t, e, page, token)
 
 	key := page.GetByTestId("key").Filter(playwright.LocatorFilterOptions{HasText: "laptop"})
+	activity, err := key.GetByTestId("key-activity").TextContent()
+	must(t, err)
+	if strings.Contains(activity, "never") {
+		t.Fatalf("key activity after a successful call: %q", activity)
+	}
 	must(t, key.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Revoke"}).Click())
 	must(t, expect.Locator(key.GetByText("revoked")).ToBeVisible())
 

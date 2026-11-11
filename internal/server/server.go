@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -125,6 +126,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 			unauthorized(w)
 			return
+		}
+		// ponytail: one write per request; batch if request volume ever matters.
+		if err := s.store.MarkKeyUsed(r.Context(), key.ID, time.Now().UTC()); err != nil {
+			s.logger.Warn("mark key used", "key", key.ID, "error", err)
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, key)))
 	})

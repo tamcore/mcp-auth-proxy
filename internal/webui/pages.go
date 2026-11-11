@@ -39,6 +39,7 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 	for _, k := range keys {
 		d.Keys = append(d.Keys, view.Key{
 			ID: k.ID, Label: k.Label, Kind: k.Kind, Upstreams: k.Upstreams, Revoked: k.Revoked(),
+			LastUsed: k.LastUsedAt, LastSuccess: k.LastSuccessAt,
 		})
 	}
 	for _, c := range cfg.OAuth.Clients {

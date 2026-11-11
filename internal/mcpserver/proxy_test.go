@@ -160,6 +160,36 @@ func TestProxyGateFlow(t *testing.T) {
 	if isErr || !strings.Contains(msg, "echo: hi") {
 		t.Fatalf("retry after auth: %q (isErr=%v)", msg, isErr)
 	}
+	assertLastSuccess(t, proxy, key.ID)
+}
+
+func assertLastSuccess(t *testing.T, p *Proxy, keyID string) {
+	t.Helper()
+	if got, err := p.store.KeyByID(context.Background(), keyID); err != nil || got.LastSuccessAt == nil {
+		t.Fatalf("successful call must set last_success_at: %+v %v", got, err)
+	}
+}
+
+func TestServerRebuiltWhenKeyUpstreamsChange(t *testing.T) {
+	proxy, _, key := newTestProxy(t, echoUpstream(t).URL)
+	ctx := context.Background()
+	first, err := proxy.ServerFor(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := proxy.ServerFor(ctx, key); again != first {
+		t.Fatal("unchanged key must reuse the cached server")
+	}
+	changed := *key
+	changed.Upstreams = nil
+	srv, err := proxy.ServerFor(ctx, &changed)
+	if err != nil || srv == first {
+		t.Fatalf("changed upstreams must rebuild the server: %v", err)
+	}
+	res, err := connectClient(t, srv).ListTools(ctx, nil)
+	if err != nil || len(res.Tools) != 1 || res.Tools[0].Name != AuthToolName {
+		t.Fatalf("rebuilt server tools: %+v %v", res, err)
+	}
 }
 
 func TestAuthToolSchema(t *testing.T) {

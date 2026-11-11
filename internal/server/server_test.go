@@ -211,3 +211,27 @@ func TestAccessLogRedactsSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthenticatedRequestMarksKeyUsed(t *testing.T) {
+	srv := newTestSrv(t)
+	ctx := context.Background()
+	const token = "mak_lastused"
+	key := &store.Key{ID: "k_used", Kind: store.KeyKindStatic, Label: "l", SecretHash: store.HashSecret(token),
+		Upstreams: []string{}, TTLSeconds: 60, CreatedAt: time.Now().UTC()}
+	if err := srv.store.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	got, err := srv.store.KeyByID(ctx, key.ID)
+	if err != nil || got.LastUsedAt == nil {
+		t.Fatalf("authenticated request must set last_used_at: %+v %v", got, err)
+	}
+}

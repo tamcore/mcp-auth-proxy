@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/tamcore/mcp-auth-proxy/internal/store"
+import (
+	"time"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/store"
+)
 
 // LoginData feeds login.tmpl.
 type LoginData struct {
@@ -27,11 +31,13 @@ type Server struct {
 
 // Key is an API key listed on the portal.
 type Key struct {
-	ID        string
-	Label     string
-	Kind      string
-	Upstreams []string
-	Revoked   bool
+	ID          string
+	Label       string
+	Kind        string
+	Upstreams   []string
+	Revoked     bool
+	LastUsed    *time.Time
+	LastSuccess *time.Time
 }
 
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.

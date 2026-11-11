@@ -44,6 +44,7 @@ internal/
   identity/              mak_/map_ credential resolution
   ntfy/                  push publisher + log-only fallback
   mcpserver/             per-key MCP server, namespaced tools, auth tool
+  ui/                    HTML templates, Tailwind CSS, theme JS; /static/ handler
   oauthserver/           client-facing OAuth AS + consent page
   upstream/              MCP client pool + OAuth linking/refresh
   server/                HTTP mux: /mcp, /oauth, /approve, /deny, /metrics
@@ -77,11 +78,16 @@ gofmt -l .                                    # empty
 go build ./...
 go vet ./...  &&  go vet -tags e2e ./e2e/
 go test -count=1 ./...
-go test -tags e2e -count=1 -timeout 300s ./e2e/
+go test -tags e2e -count=1 -timeout 300s ./e2e/   # playwright-go, headless Chromium
+go generate ./internal/ui                     # tailwindcss on PATH; no diff
 go mod tidy                                   # clean
 golangci-lint run                             # 0 issues
 golangci-lint run --build-tags e2e ./e2e/     # 0 issues
 ```
+
+Every HTML page renders through `internal/ui` with `html/template`. Pages load
+only same-origin `/static/` assets; never add a CDN, web font, or other
+external resource. `internal/ui/assets/app.css` is generated and committed.
 
 CI additionally runs the test suite with `-race` (the local sandbox may lack
 gcc; see `.github/workflows/ci.yaml`), the live suite against a freshly built

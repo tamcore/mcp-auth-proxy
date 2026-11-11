@@ -87,6 +87,14 @@ httpRoute:
   #     namespace: gateway-system
   #     sectionName: https
   hostnames: []
+  # Permanent redirect from plain http to https, attached to the gateway's
+  # http listener. Passkeys only work over https.
+  httpsRedirect:
+    enabled: false
+    parentRefs: []
+    #   - name: my-gateway
+    #     namespace: gateway-system
+    #     sectionName: http
 
 # Extra CA certificates (PEM) trusted for outgoing TLS to users' ntfy servers and upstreams,
 # e.g. a private root CA. Added to the system roots, not replacing them.

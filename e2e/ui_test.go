@@ -295,3 +295,15 @@ func TestUISettingsPasswordAndPasskeys(t *testing.T) {
 	must(t, expect.Locator(page.GetByText("Passkey removed.")).ToBeVisible())
 	must(t, expect.Locator(page.GetByTestId("passkey")).ToHaveCount(0))
 }
+
+func TestUIPasskeysUnavailable(t *testing.T) {
+	e, _ := startMultiUserEnv(t)
+	page := newPage(t, e, playwright.BrowserNewContextOptions{})
+	// Simulate a browser that offers no WebAuthn API (e.g. some iOS browsers).
+	must(t, page.AddInitScript(playwright.Script{Content: playwright.String(
+		`Object.defineProperty(navigator, "credentials", {value: undefined}); delete window.PublicKeyCredential;`)}))
+	gotoPath(t, page, "/login")
+	button := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Sign in with a passkey"})
+	must(t, expect.Locator(button).ToBeDisabled())
+	must(t, expect.Locator(page.GetByText("This browser does not offer passkeys")).ToBeVisible())
+}

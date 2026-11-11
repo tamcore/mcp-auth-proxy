@@ -175,6 +175,10 @@ helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
   --set 'config.users[0]=alice' --set 'config.admins[0]=alice'
 ```
 
+Passkeys need https. With `httpRoute.httpsRedirect.enabled` the chart adds a
+permanent http → https redirect on the gateway's http listener, and the proxy
+sends HSTS whenever `base_url` is https.
+
 The image trusts only public CAs. If a user's ntfy server or an upstream uses a private CA,
 pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the
 system roots via `SSL_CERT_DIR`).

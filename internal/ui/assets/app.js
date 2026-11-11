@@ -141,8 +141,21 @@
     }, 5000);
   };
 
+  // Passkeys need a secure context and the WebAuthn API; say why when absent.
+  const checkPasskeys = () => {
+    const buttons = document.querySelectorAll("[data-passkey-login], [data-passkey-add]");
+    if (!buttons.length || (window.isSecureContext && window.PublicKeyCredential && navigator.credentials)) return;
+    for (const b of buttons) b.disabled = true;
+    showError(
+      window.isSecureContext
+        ? "This browser does not offer passkeys. Use another browser or log in with your password."
+        : `Passkeys need https. Open https://${location.host}${location.pathname}.`,
+    );
+  };
+
   apply();
   system.addEventListener("change", apply);
+  document.addEventListener("DOMContentLoaded", checkPasskeys);
   document.addEventListener("DOMContentLoaded", watchPending);
   document.addEventListener("DOMContentLoaded", apply);
   document.addEventListener("click", (e) => {

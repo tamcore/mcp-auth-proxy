@@ -58,6 +58,8 @@ upstreams:
   #     token_url: https://idp.example.com/token           # per user, refreshed
   #     client_id: my-client-id
   #     scopes: ["mcp:read", "mcp:write"]
+  #     resource: https://mcp.example.com/mcp   # RFC 8707; byte-exact as in the
+  #                                             # upstream's oauth-protected-resource
 
 # Client-facing OAuth authorization server (authorization-code + PKCE S256).
 # Logging in grants identity only; every tool call still needs the OTP.

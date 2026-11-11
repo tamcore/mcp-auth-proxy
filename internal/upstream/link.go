@@ -45,6 +45,7 @@ func (u *Upstream) BeginLink(redirectURI string) (*AuthRequest, error) {
 	if len(cfg.Scopes) > 0 {
 		q.Set("scope", strings.Join(cfg.Scopes, " "))
 	}
+	setResource(q, cfg.Resource)
 	return &AuthRequest{
 		URL:         cfg.AuthorizeURL + "?" + q.Encode(),
 		State:       state,
@@ -65,6 +66,7 @@ func (u *Upstream) FinishLink(ctx context.Context, req *AuthRequest, code string
 		"code_verifier": {req.Verifier},
 	}
 	form.Set(clientIDFormKey, u.cfg.OAuth.ClientID)
+	setResource(form, u.cfg.OAuth.Resource)
 	tok, err := exchangeToken(ctx, u.httpc, u.cfg.OAuth.TokenURL, form)
 	if err != nil {
 		return err
@@ -111,6 +113,12 @@ func (u *Upstream) Link(ctx context.Context, opts LinkOptions) error {
 		_, _ = fmt.Fprintf(opts.Stdout, "Linked upstream %q.\n", u.cfg.Name)
 	}
 	return nil
+}
+
+func setResource(v url.Values, resource string) {
+	if resource != "" {
+		v.Set("resource", resource)
+	}
 }
 
 func randomState() (string, error) {

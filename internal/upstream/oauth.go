@@ -104,6 +104,7 @@ func (rt *authRoundTripper) refresh(ctx context.Context) error {
 		"refresh_token": {tok.RefreshToken},
 	}
 	form.Set(clientIDFormKey, cfg.ClientID)
+	setResource(form, cfg.Resource)
 	newTok, err := exchangeToken(ctx, rt.up.httpc, cfg.TokenURL, form)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ func TestBeginFinishLink(t *testing.T) {
 		_ = r.ParseForm()
 		sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
 		if r.PostForm.Get("code") != "the-code" || r.PostForm.Get("redirect_uri") != redirect ||
+			r.PostForm.Get("resource") != linkResource ||
 			base64.RawURLEncoding.EncodeToString(sum[:]) != challenge {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -37,6 +38,7 @@ func TestBeginFinishLink(t *testing.T) {
 	defer tokenSrv.Close()
 	u := NewFromConfig(config.UpstreamConfig{Name: "garmin", URL: "https://up/mcp", OAuth: &config.UpstreamOAuthConfig{
 		AuthorizeURL: "https://idp/authorize", TokenURL: tokenSrv.URL, ClientID: linkClientID, Scopes: []string{"a", "b"},
+		Resource: linkResource,
 	}}, st, nil, nil).WithOwner("u_x")
 
 	req, err := u.BeginLink(redirect)
@@ -56,7 +58,10 @@ func TestBeginFinishLink(t *testing.T) {
 	}
 }
 
-const linkClientID = "link-client"
+const (
+	linkClientID = "link-client"
+	linkResource = "https://up/mcp"
+)
 
 // checkAuthorizeURL validates the authorize request and returns its challenge.
 func checkAuthorizeURL(t *testing.T, req *AuthRequest, redirect string) string {
@@ -67,7 +72,8 @@ func checkAuthorizeURL(t *testing.T, req *AuthRequest, redirect string) string {
 	}
 	q := authz.Query()
 	if q.Get("client_id") != linkClientID || q.Get("redirect_uri") != redirect || q.Get("state") != req.State ||
-		q.Get("scope") != "a b" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
+		q.Get("scope") != "a b" || q.Get("resource") != linkResource ||
+		q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" {
 		t.Fatalf("authorize URL: %s", req.URL)
 	}
 	return q.Get("code_challenge")

@@ -101,6 +101,9 @@ type UpstreamOAuthConfig struct {
 	TokenURL     string   `mapstructure:"token_url"`
 	ClientID     string   `mapstructure:"client_id"`
 	Scopes       []string `mapstructure:"scopes"`
+	// Resource is the RFC 8707 resource indicator, byte-exact as the upstream
+	// advertises it in /.well-known/oauth-protected-resource.
+	Resource string `mapstructure:"resource"`
 }
 
 // OAuthConfig is the client-facing authorization server section.

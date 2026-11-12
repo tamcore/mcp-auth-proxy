@@ -253,22 +253,23 @@ func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 		t.Fatal("fresh user must have no usable password before the invite sets one")
 	}
 	// invite is consumable exactly once
-	if _, err := st.ConsumeInvite(ctx, invites[testAlice], time.Now().UTC()); err != nil {
+	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.ConsumeInvite(ctx, invites[testAlice], time.Now().UTC()); err != store.ErrNotFound {
+	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", time.Now().UTC()); err != store.ErrNotFound {
 		t.Fatalf("reuse must fail: %v", err)
 	}
-	// second run re-mints invites for users who still have no password
+	// second run re-mints invites only for users who still have no password;
+	// alice set hers when she consumed the invite
 	invites2, err := st.EnsureConfigUsers(ctx, []string{testAlice, testBob}, nil, time.Now().UTC())
-	if err != nil || len(invites2) != 2 {
+	if err != nil || len(invites2) != 1 {
 		t.Fatalf("passwordless users must get a fresh invite each start: %v %v", invites2, err)
 	}
 	// re-minting revokes the previous unused link
-	if _, err := st.ConsumeInvite(ctx, invites[testBob], time.Now().UTC()); err != store.ErrNotFound {
+	if _, err := st.ConsumeInvite(ctx, invites[testBob], "h", time.Now().UTC()); err != store.ErrNotFound {
 		t.Fatalf("superseded invite must be invalid: %v", err)
 	}
-	if _, err := st.ConsumeInvite(ctx, invites2[testBob], time.Now().UTC()); err != nil {
+	if _, err := st.ConsumeInvite(ctx, invites2[testBob], "h", time.Now().UTC()); err != nil {
 		t.Fatalf("fresh invite must work: %v", err)
 	}
 }
@@ -348,7 +349,7 @@ func inviteFlow(t *testing.T, ts *httptest.Server, token string) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("invite page: %d", resp.StatusCode)
 	}
-	form := url.Values{pwField: []string{testBobPw}, "password2": []string{testBobPw}}
+	form := url.Values{pwField: []string{testBobPw}, pw2Field: []string{testBobPw}}
 	resp, err = client.PostForm(ts.URL+"/invite/"+token, form)
 	if err != nil {
 		t.Fatal(err)
@@ -410,7 +411,7 @@ func adminFlow(t *testing.T, ts *httptest.Server, st *store.Store, ctx context.C
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), testBob) {
 		t.Fatalf("admin page: %d", resp.StatusCode)
 	}
-	form := url.Values{"id": []string{bob.ID}, "disabled": []string{"1"}}
+	form := url.Values{"id": []string{bob.ID}, disabledField: []string{"1"}}
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/admin/disable",
 		strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

@@ -10,7 +10,10 @@ import (
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
-const minPasswordLen = 8
+const (
+	minPasswordLen   = 8
+	maxPasswordBytes = 72 // bcrypt rejects longer passwords
+)
 
 func (ui *WebUI) handleSettings(w http.ResponseWriter, r *http.Request) {
 	user, ok := ui.sessions.Require(w, r, ui.store)
@@ -73,6 +76,9 @@ func (ui *WebUI) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		return
 	case len(pw) < minPasswordLen:
 		ui.renderSettings(w, r, user, http.StatusBadRequest, "The new password must have at least 8 characters.", "")
+		return
+	case len(pw) > maxPasswordBytes:
+		ui.renderSettings(w, r, user, http.StatusBadRequest, "The new password must have at most 72 bytes.", "")
 		return
 	case pw != r.PostForm.Get("password2"):
 		ui.renderSettings(w, r, user, http.StatusBadRequest, "The new passwords do not match.", "")

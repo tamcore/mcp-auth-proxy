@@ -208,31 +208,38 @@ func (g *Gate) Verify(ctx context.Context, key *store.Key, otp string) (time.Tim
 		return time.Time{}, ErrNoChallenge
 	}
 	if !now.Before(ch.ExpiresAt) {
-		_ = g.store.UpdateChallenge(ctx, ch.ID, store.ChallengeExhausted, ch.Attempts)
+		_ = g.store.ResolveChallenge(ctx, ch.ID, store.ChallengeExhausted)
 		return time.Time{}, ErrExpired
 	}
-	if !hmac.Equal([]byte(store.HashSecret(otp)), []byte(ch.OTPHash)) {
-		return time.Time{}, g.recordWrongAttempt(ctx, ch)
+	attempts, err := g.store.ReserveAttempt(ctx, ch.ID, g.maxAttempts)
+	if err != nil {
+		return time.Time{}, notPending(err, ErrExhausted)
 	}
-	if err := g.store.UpdateChallenge(ctx, ch.ID, store.ChallengeApproved, ch.Attempts); err != nil {
-		return time.Time{}, err
+	if !hmac.Equal([]byte(store.HashSecret(otp)), []byte(ch.OTPHash)) {
+		return time.Time{}, g.recordWrongAttempt(ctx, ch.ID, attempts)
+	}
+	if err := g.store.ResolveChallenge(ctx, ch.ID, store.ChallengeApproved); err != nil {
+		return time.Time{}, notPending(err, ErrNotPending)
 	}
 	return g.grantSession(ctx, key, store.OriginOTP, now)
 }
 
-func (g *Gate) recordWrongAttempt(ctx context.Context, ch *store.Challenge) error {
-	attempts := ch.Attempts + 1
-	status := store.ChallengePending
-	if attempts >= g.maxAttempts {
-		status = store.ChallengeExhausted
+func (g *Gate) recordWrongAttempt(ctx context.Context, id string, attempts int) error {
+	if attempts < g.maxAttempts {
+		return ErrWrongCode
 	}
-	if err := g.store.UpdateChallenge(ctx, ch.ID, status, attempts); err != nil {
-		return err
+	if err := g.store.ResolveChallenge(ctx, id, store.ChallengeExhausted); err != nil {
+		return notPending(err, ErrExhausted)
 	}
-	if status == store.ChallengeExhausted {
-		return ErrExhausted
+	return ErrExhausted
+}
+
+// notPending maps the store's lost-race error to the gate error callers see.
+func notPending(err, as error) error {
+	if errors.Is(err, store.ErrNotPending) {
+		return as
 	}
-	return ErrWrongCode
+	return err
 }
 
 func (g *Gate) grantSession(ctx context.Context, key *store.Key, origin string, now time.Time) (time.Time, error) {
@@ -272,11 +279,11 @@ func (g *Gate) resolve(ctx context.Context, id, sig, status string, grant bool) 
 		return ErrNotPending
 	}
 	if !g.now().Before(ch.ExpiresAt) {
-		_ = g.store.UpdateChallenge(ctx, ch.ID, store.ChallengeExhausted, ch.Attempts)
+		_ = g.store.ResolveChallenge(ctx, ch.ID, store.ChallengeExhausted)
 		return ErrExpired
 	}
-	if err := g.store.UpdateChallenge(ctx, ch.ID, status, ch.Attempts); err != nil {
-		return err
+	if err := g.store.ResolveChallenge(ctx, ch.ID, status); err != nil {
+		return notPending(err, ErrNotPending)
 	}
 	if !grant {
 		return nil

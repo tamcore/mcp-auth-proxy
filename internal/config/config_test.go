@@ -187,3 +187,14 @@ func TestBaseURLForms(t *testing.T) {
 		}
 	}
 }
+
+func TestBaseURLIsNormalizedToLowercase(t *testing.T) {
+	body := "base_url: HTTPS://Proxy.Example\nstate_dir: ./data\nupstreams: [{name: e, command: [x]}]\n"
+	cfg, err := Load(writeCfg(t, body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.BaseURL != "https://proxy.example" {
+		t.Fatalf("base_url %q: HSTS, Secure cookies and passkeys key on a lowercase https:// prefix", cfg.BaseURL)
+	}
+}

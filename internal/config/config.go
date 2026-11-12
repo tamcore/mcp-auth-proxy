@@ -138,7 +138,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	cfg := &Config{
-		BaseURL:       v.GetString("base_url"),
+		BaseURL:       normalizeBaseURL(v.GetString("base_url")),
 		ListenAddr:    v.GetString("listen_addr"),
 		OpsListenAddr: v.GetString("ops_listen_addr"),
 		StateDir:      v.GetString("state_dir"),
@@ -243,6 +243,17 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("config: oauth.authorize_code_ttl must be positive"))
 	}
 	return errors.Join(errs...)
+}
+
+// normalizeBaseURL lowercases scheme and host, so checks such as
+// HasPrefix(base_url, "https://") hold for "HTTPS://Proxy.Example" too.
+func normalizeBaseURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	u.Host = strings.ToLower(u.Host)
+	return u.String()
 }
 
 // validateBaseURL requires an absolute http(s) origin: it builds every

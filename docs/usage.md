@@ -12,7 +12,7 @@ At `{base_url}/login` a user logs in with username and password, or with a passk
 
 - create API keys for the globally configured MCP servers available to them, and change a key's servers later; each key shows when it was last seen and last succeeded;
 - run the OAuth flow for registered clients;
-- add their **own** MCP servers (stored in the database, visible only to them);
+- add their **own** MCP servers (stored in the database, visible only to them); a URL server must answer MCP `initialize` and `tools/list` when it is added, so the proxy never talks to other URLs on a user's behalf;
 - link their own account at an OAuth upstream ("Link my account");
 - view their **audit log**: which client called which tool with which parameters (responses optional via `audit.log_responses`, entries garbage-collected after `audit.retention`, default 30 days).
 

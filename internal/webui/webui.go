@@ -22,6 +22,9 @@ type WebUI struct {
 	webauthn   *webauthn.WebAuthn
 	ceremonies *ceremonies
 	logger     *slog.Logger
+
+	// OnUpstreamsChanged runs after a user added or deleted an own upstream.
+	OnUpstreamsChanged func(userID string)
 }
 
 // New builds the web UI.

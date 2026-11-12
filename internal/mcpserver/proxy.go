@@ -74,6 +74,7 @@ func New(o Options) *Proxy {
 type cachedServer struct {
 	srv       *mcp.Server
 	upstreams string
+	userID    string
 }
 
 // ServerFor returns the cached per-key MCP server, building it on first use.
@@ -88,7 +89,11 @@ func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, err
 	srv, complete := p.build(ctx, key)
 	if complete {
 		p.mu.Lock()
-		p.servers[key.ID] = cachedServer{srv: srv, upstreams: sig}
+		c := cachedServer{srv: srv, upstreams: sig}
+		if key.UserID != nil {
+			c.userID = *key.UserID
+		}
+		p.servers[key.ID] = c
 		p.mu.Unlock()
 	}
 	return srv, nil
@@ -157,6 +162,23 @@ func (p *Proxy) resolveUpstream(ctx context.Context, key *store.Key, name string
 	owned := u.WithOwner(*key.UserID)
 	cache[name] = owned
 	return owned, nil
+}
+
+// ForgetUser drops the user's cached upstreams and per-key servers after
+// they changed their own upstreams; the next request reads them anew.
+func (p *Proxy) ForgetUser(userID string) {
+	p.mu.Lock()
+	dropped := p.userUps[userID]
+	delete(p.userUps, userID)
+	for id, c := range p.servers {
+		if c.userID == userID {
+			delete(p.servers, id)
+		}
+	}
+	p.mu.Unlock()
+	for _, u := range dropped {
+		_ = u.Close()
+	}
 }
 
 // userCache returns the user's upstream cache, seeded with their database

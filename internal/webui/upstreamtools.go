@@ -22,6 +22,24 @@ type toolInfo struct {
 	Description string `json:"description"`
 }
 
+// probeMCP checks that a URL upstream answers MCP initialize and tools/list
+// before it is stored, so the proxy never talks to a non-MCP URL (metadata
+// service, internal admin page) on a user's behalf.
+func (ui *WebUI) probeMCP(ctx context.Context, own *store.UserUpstream) error {
+	u := upstream.NewFromConfig(own.Config(), ui.store, nil, ui.logger)
+	defer func() { _ = u.Close() }()
+	ctx, cancel := context.WithTimeout(ctx, toolsTimeout)
+	defer cancel()
+	_, err := u.Tools(ctx)
+	return err
+}
+
+func (ui *WebUI) upstreamsChanged(userID string) {
+	if ui.OnUpstreamsChanged != nil {
+		ui.OnUpstreamsChanged(userID)
+	}
+}
+
 // userUpstream builds a fresh instance of the named upstream as the user sees
 // it: their own servers win, global OAuth upstreams run with their token.
 func (ui *WebUI) userUpstream(ctx context.Context, user *store.User, name string) (*upstream.Upstream, bool) {

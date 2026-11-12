@@ -278,10 +278,18 @@ func (ui *WebUI) handleAddUpstream(w http.ResponseWriter, r *http.Request) {
 	if bearer != "" {
 		up.Headers = map[string]string{"Authorization": "Bearer " + bearer}
 	}
+	if url != "" {
+		if err := ui.probeMCP(r.Context(), up); err != nil {
+			ui.logger.Warn("own upstream is not an MCP server", "user", user.Username, "upstream", name, "error", err)
+			http.Error(w, url+" did not answer as an MCP server", http.StatusBadRequest)
+			return
+		}
+	}
 	if err := ui.store.CreateUserUpstream(r.Context(), up); err != nil {
 		http.Error(w, "could not save upstream (name taken?)", http.StatusBadRequest)
 		return
 	}
+	ui.upstreamsChanged(user.ID)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -295,6 +303,7 @@ func (ui *WebUI) handleDeleteUpstream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	ui.upstreamsChanged(user.ID)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

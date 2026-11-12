@@ -139,6 +139,8 @@ func (u *Upstream) httpClientWithAuth() *http.Client {
 	for k, v := range u.cfg.Headers {
 		rt.header.Set(k, v)
 	}
+	// No client timeout: it would cut the SDK's long-lived SSE streams; the
+	// caller's request context bounds each call.
 	return &http.Client{Transport: rt}
 }
 

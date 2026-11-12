@@ -51,7 +51,7 @@ checksum:
 #
 # Verify a download with:
 #   cosign verify-blob --bundle mcp-auth-proxy_<version>_SHA256SUMS.bundle \
-#     --certificate-identity-regexp 'https://github.com/tamcore/mcp-auth-proxy/.*' \
+#     --certificate-identity-regexp '^https://github\.com/tamcore/mcp-auth-proxy/\.github/workflows/release\.yaml@refs/tags/v' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
 #     mcp-auth-proxy_<version>_SHA256SUMS
 signs:
@@ -65,6 +65,17 @@ signs:
       - "--yes"
       - "--bundle=${signature}"
       - "${artifact}"
+
+# Keyless cosign signature on every pushed image digest.
+docker_signs:
+  - id: cosign-images
+    cmd: cosign
+    artifacts: images
+    output: true
+    args:
+      - sign
+      - "--yes"
+      - "${artifact}@${digest}"
 
 dockers_v2:
   - id: ghcr

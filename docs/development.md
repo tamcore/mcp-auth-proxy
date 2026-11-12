@@ -34,4 +34,4 @@ The e2e suite drives the web UI in headless Chromium via playwright-go. The firs
 
 ## Releases
 
-Push a `v*` tag. `.github/workflows/release.yaml` re-runs CI as a gate, then GoReleaser builds the archives and the GHCR image, cosign signs the checksums keylessly, and the chart is pushed to `oci://ghcr.io/tamcore/charts`.
+Push a `v*` tag. `.github/workflows/release.yaml` re-runs CI as a gate, then GoReleaser builds the archives and the GHCR image, cosign signs the checksums and the images keylessly, and the chart is pushed to `oci://ghcr.io/tamcore/charts`.

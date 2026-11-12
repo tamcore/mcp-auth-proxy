@@ -94,7 +94,7 @@ func noRedirectClient() *http.Client {
 
 func login(t *testing.T, ts *httptest.Server, user, pw string) *http.Cookie {
 	t.Helper()
-	resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, "password": {pw}})
+	resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, pwField: {pw}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	seedUser(t, st, testAlice, "secret-pw")
 
 	// wrong password -> 401
-	resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {testAlice}, "password": {"nope"}})
+	resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {testAlice}, pwField: {"nope"}})
 	if err != nil {
 		t.Fatal(err)
 	}

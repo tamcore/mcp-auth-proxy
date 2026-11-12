@@ -53,9 +53,10 @@ The database stores:
 
 - **Hashes only:** keys, client-facing OAuth access tokens, invite tokens, and one-time codes as SHA-256 hex; passwords as bcrypt. A stolen database yields none of them.
 - **Plaintext, because the proxy must present them:** upstream OAuth access and refresh tokens, per-user upstream headers (for example a bearer token), and per-user ntfy tokens. Protect the database and its backups accordingly.
-- **No secret:** passkey public keys and sign counts, audit entries, users, and upstream definitions.
+- **No secret:** passkey public keys and sign counts, users, and upstream definitions.
+- **Whatever clients send:** audit entries store the full tool arguments (and, with `audit.log_responses`, the results) in the database and the service log. If a client passes a secret as a tool argument, it lands there. Disable `audit.enabled` if that is not acceptable.
 
-Secrets are shown once at creation and never again. Logs are JSON, carry only hashes, and never carry a token or password. One exception: for a key without an owner (`key create` without `--user`), the one-time code and the signed Approve/Deny URLs are logged, because there is no other place to deliver them.
+Secrets are shown once at creation and never again. Logs are JSON, carry only hashes, and never carry a token or password. Exceptions, because there is no other place to deliver them: for a key without an owner (`key create` without `--user`), the one-time code and the signed Approve/Deny URLs are logged; and `serve` logs the invite URL of every configured user without a password on each start until the invite is used. Restrict who can read the service log.
 
 ## Deployment checklist
 

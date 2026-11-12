@@ -49,7 +49,7 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not set password", http.StatusInternalServerError)
 		return
 	}
-	Set(w, ui.sessions.IssueFor(user))
+	ui.sessions.Set(w, ui.sessions.IssueFor(user))
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

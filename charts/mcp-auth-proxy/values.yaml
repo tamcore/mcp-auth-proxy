@@ -60,6 +60,7 @@ config:
   #     redirect_uris: ["https://claude.ai/api/mcp/callback"]
 
 persistence:
+  # false mounts an emptyDir: the database, keys and signing secret are lost on every restart.
   enabled: true
   existingClaim: ""
   accessMode: ReadWriteOnce

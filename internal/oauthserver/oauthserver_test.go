@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -61,13 +63,13 @@ func challengeS256(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func authorizeQuery(verifier, method string) url.Values {
+func authorizeQuery(verifier string) url.Values {
 	return url.Values{
 		"response_type":         {"code"},
 		"client_id":             {testClientID},
 		"redirect_uri":          {testRedirect},
 		"code_challenge":        {challengeS256(verifier)},
-		"code_challenge_method": {method},
+		"code_challenge_method": {"S256"},
 		"state":                 {"st1"},
 	}
 }
@@ -75,7 +77,7 @@ func authorizeQuery(verifier, method string) url.Values {
 // consentAndGetCode runs authorize+consent and returns the issued code.
 func consentAndGetCode(t *testing.T, s *Server, verifier string) string {
 	t.Helper()
-	q := authorizeQuery(verifier, "S256")
+	q := authorizeQuery(verifier)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
 	s.HandleAuthorize(rec, req)
@@ -86,10 +88,7 @@ func consentAndGetCode(t *testing.T, s *Server, verifier string) string {
 		!strings.Contains(rec.Body.String(), "Every proxied tool call still requires") {
 		t.Fatalf("consent page not honest: %s", rec.Body.String())
 	}
-	form := url.Values{}
-	for k := range q {
-		form.Set(k, q.Get(k))
-	}
+	form := hiddenFields(t, rec.Body.String())
 	form.Set("label", "Claude on laptop")
 	rec2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodPost, "/oauth/consent", strings.NewReader(form.Encode()))
@@ -105,6 +104,65 @@ func consentAndGetCode(t *testing.T, s *Server, verifier string) string {
 	return loc.Query().Get("code")
 }
 
+var hiddenInput = regexp.MustCompile(`<input type="hidden" name="([^"]+)" value="([^"]*)">`)
+
+// hiddenFields returns what a browser submits from the rendered consent form.
+func hiddenFields(t *testing.T, page string) url.Values {
+	t.Helper()
+	form := url.Values{}
+	for _, m := range hiddenInput.FindAllStringSubmatch(page, -1) {
+		form.Set(m[1], html.UnescapeString(m[2]))
+	}
+	if len(form) == 0 {
+		t.Fatal("consent page has no hidden fields")
+	}
+	return form
+}
+
+func TestRedirectURIWithQueryKeepsIt(t *testing.T) {
+	const withQuery = "https://app.example/cb?tenant=a"
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "proxy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cfg := testConfig()
+	cfg.OAuth.Clients[0].RedirectURIs = []string{withQuery}
+	s, err := New(context.Background(), st, cfg, ui.New(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := authorizeQuery("v")
+	q.Set("redirect_uri", withQuery)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/consent", strings.NewReader(q.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	s.HandleConsent(rec, req)
+	loc, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loc.Query(); got.Get("tenant") != "a" || got.Get("code") == "" || got.Get("state") != "st1" {
+		t.Fatalf("redirect %q lost the registered query or the code", loc)
+	}
+}
+
+func TestUsedAndExpiredCodesAreDropped(t *testing.T) {
+	s := newTestServer(t)
+	now := time.Now()
+	s.now = func() time.Time { return now }
+	code := consentAndGetCode(t, s, "verifier-1")
+	if _, ok := s.takeCode(code); !ok {
+		t.Fatal("fresh code not accepted")
+	}
+	consentAndGetCode(t, s, "verifier-2")
+	now = now.Add(time.Hour)
+	consentAndGetCode(t, s, "verifier-3")
+	if n := len(s.codes); n != 1 {
+		t.Fatalf("%d codes kept in memory, want only the live one", n)
+	}
+}
+
 func tokenForm(code, verifier string) url.Values {
 	return url.Values{
 		"grant_type":    {"authorization_code"},
@@ -117,7 +175,7 @@ func tokenForm(code, verifier string) url.Values {
 
 func TestAuthorizeFailClosedMatrix(t *testing.T) {
 	s := newTestServer(t)
-	base := authorizeQuery("v", "S256")
+	base := authorizeQuery("v")
 	mutate := map[string]func(q url.Values){
 		"unknown client":  func(q url.Values) { q.Set("client_id", "nope") },
 		"bad redirect":    func(q url.Values) { q.Set("redirect_uri", "https://evil/cb") },
@@ -128,7 +186,7 @@ func TestAuthorizeFailClosedMatrix(t *testing.T) {
 	}
 	for name, m := range mutate {
 		t.Run(name, func(t *testing.T) {
-			q := authorizeQuery("v", "S256")
+			q := authorizeQuery("v")
 			m(q)
 			rec := httptest.NewRecorder()
 			s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))

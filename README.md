@@ -215,4 +215,9 @@ and run `go generate ./internal/ui`; CI fails if the committed file is stale.
 
 ## License
 
-MIT, copyright Philipp Born. See [LICENSE](LICENSE).
+MIT, copyright Philipp Born. See [LICENSE](LICENSE). Third-party licences of
+everything linked into the binary are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); regenerate it with
+`go run ./cmd/notices` after a dependency change.
+
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).

@@ -203,10 +203,23 @@ func (s *Store) backup(ctx context.Context, version int) error {
 	}
 	dst := fmt.Sprintf("%s.pre-v%04d.bak", s.path, version)
 	s.snapshot = dst
-	if _, err := os.Stat(dst); err == nil {
-		return nil // an earlier, failed attempt already took the snapshot
+	if _, err := os.Stat(dst); err == nil { // an earlier, failed attempt already took it
+		if err := os.Chmod(dst, 0o600); err != nil {
+			return fmt.Errorf("store: restrict backup %04d: %w", version, err)
+		}
+		return nil
 	}
-	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
+	// VACUUM INTO keeps the mode of an existing empty file, so the copy is never readable by others.
+	tmp := dst + ".tmp"
+	_ = os.Remove(tmp)
+	if err := ownerOnly(tmp); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, tmp); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("store: backup before migration %04d: %w", version, err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
 		return fmt.Errorf("store: backup before migration %04d: %w", version, err)
 	}
 	return nil

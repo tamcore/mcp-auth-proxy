@@ -5,24 +5,42 @@ repos:
         name: go fmt
         entry: go fmt ./...
         language: system
+        types: [go]
         pass_filenames: false
+
+      # Reports a diff instead of applying one. `go fix ./...` rewrites files
+      # under the hook, which fights pre-commit's stash of unstaged changes on a
+      # partial commit. Failing on a real diff, or on go fix itself failing, is
+      # deterministic and leaves the worktree alone; run `go fix ./...` yourself
+      # to apply what it reports.
       - id: go-fix
         name: go fix (report only)
-        entry: sh -c 'go fix ./... && git diff --exit-code -- go.mod go.sum || echo "go fix reported changes"'
+        entry: >-
+          bash -c 'diff=$(go fix -diff ./...) || exit 1;
+          if [ -n "$diff" ]; then echo "$diff";
+          echo "go fix reports pending changes. Apply them with go fix ./...";
+          exit 1; fi'
         language: system
+        types: [go]
         pass_filenames: false
+
       - id: go-mod-tidy
         name: go mod tidy
         entry: go mod tidy
         language: system
+        types_or: [go, go-mod, go-sum]
         pass_filenames: false
+
       - id: go-vet
         name: go vet
         entry: go vet ./...
         language: system
+        types: [go]
         pass_filenames: false
+
       - id: golangci-lint
         name: golangci-lint run
         entry: golangci-lint run
         language: system
+        types: [go]
         pass_filenames: false

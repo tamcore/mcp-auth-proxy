@@ -18,6 +18,7 @@ import (
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/version"
 )
 
 // ErrUnknownUpstream is returned when a name is not configured.
@@ -99,7 +100,7 @@ func (u *Upstream) Connect(ctx context.Context) error {
 		return nil
 	}
 	transport := u.transport()
-	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
+	client := mcp.NewClient(version.Implementation(), nil)
 	sess, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return fmt.Errorf("upstream %s: connect: %w", u.cfg.Name, err)

@@ -325,7 +325,7 @@ jobs:
       - name: Build twice from independent caches and compare
         env:
           CGO_ENABLED: "0"
-          LDFLAGS: -s -w -X main.version=repro-check -X main.commit=0000000000000000000000000000000000000000
+          LDFLAGS: -s -w -X github.com/tamcore/mcp-auth-proxy/internal/version.Version=repro-check -X github.com/tamcore/mcp-auth-proxy/internal/version.Commit=0000000000000000000000000000000000000000
         run: |
           set -o pipefail
           GOCACHE="${RUNNER_TEMP}/gocache-1" go build -trimpath -ldflags "${LDFLAGS}" -o "${RUNNER_TEMP}/build-1/mcp-auth-proxy" ./cmd/mcp-auth-proxy

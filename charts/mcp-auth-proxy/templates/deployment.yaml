@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- if .Values.extraCACerts }}
         checksum/ca: {{ .Values.extraCACerts | sha256sum }}
         {{- end }}
@@ -70,7 +70,7 @@ spec:
               value: /etc/ssl/certs:/etc/mcp-auth-proxy-ca
           {{- end }}
           envFrom:
-            - configMapRef:
+            - secretRef:
                 name: {{ include "mcp-auth-proxy.fullname" . }}
           volumeMounts:
             - name: config
@@ -110,13 +110,15 @@ spec:
             name: {{ include "mcp-auth-proxy.fullname" . }}-ca
         {{- end }}
         - name: config
-          configMap:
-            name: {{ include "mcp-auth-proxy.fullname" . }}
+          secret:
+            secretName: {{ include "mcp-auth-proxy.fullname" . }}
         - name: data
           {{- if .Values.persistence.existingClaim }}
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim }}
-          {{- else }}
+          {{- else if .Values.persistence.enabled }}
           persistentVolumeClaim:
             claimName: {{ include "mcp-auth-proxy.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
           {{- end }}

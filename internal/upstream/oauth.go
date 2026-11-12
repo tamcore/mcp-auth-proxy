@@ -44,7 +44,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		return resp, err
 	}
 	_ = resp.Body.Close()
-	if err := rt.refresh(req.Context()); err != nil {
+	if err := rt.refresh(req.Context(), token); err != nil {
 		return nil, err
 	}
 	if token, err = rt.token(req.Context()); err != nil {
@@ -85,7 +85,12 @@ func (rt *authRoundTripper) send(req *http.Request, token string) (*http.Respons
 	if token != "" {
 		clone.Header.Set("Authorization", "Bearer "+token)
 	}
-	return rt.base.RoundTrip(clone)
+	resp, err := rt.base.RoundTrip(clone)
+	if err == nil && req.Method == http.MethodPost {
+		// One JSON-RPC answer per POST; the long-lived SSE GET stream is not capped.
+		resp.Body = http.MaxBytesReader(nil, resp.Body, maxResponseBytes)
+	}
+	return resp, err
 }
 
 func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
@@ -97,7 +102,7 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if tok.ExpiresAt != nil && time.Now().After(tok.ExpiresAt.Add(-30*time.Second)) && tok.RefreshToken != "" {
-		if err := rt.refresh(ctx); err != nil {
+		if err := rt.refresh(ctx, tok.AccessToken); err != nil {
 			rt.up.logger.Warn("upstream token refresh failed", "upstream", rt.up.cfg.Name, "error", err)
 		}
 		if tok2, err2 := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name, rt.up.owner); err2 == nil {
@@ -107,8 +112,11 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 	return tok.AccessToken, nil
 }
 
-// refresh exchanges the refresh token for a new set and persists it.
-func (rt *authRoundTripper) refresh(ctx context.Context) error {
+// refresh exchanges the refresh token for a new set and persists it, unless
+// the stored access token is no longer the one that failed: then another
+// request already rotated it, and the old refresh token may be spent.
+// ponytail: the lock is per instance; separate instances of one upstream can still refresh twice.
+func (rt *authRoundTripper) refresh(ctx context.Context, failed string) error {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	cfg := rt.up.cfg.OAuth
@@ -121,6 +129,9 @@ func (rt *authRoundTripper) refresh(ctx context.Context) error {
 	}
 	if err != nil {
 		return err
+	}
+	if tok.AccessToken != failed {
+		return nil
 	}
 	if tok.RefreshToken == "" {
 		return ErrNoToken

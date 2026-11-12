@@ -94,6 +94,6 @@ func (ui *WebUI) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ui.logger.Info("password changed", "user", user.Username)
-	Set(w, ui.sessions.issueAt(user.Username, cutoff))
+	ui.sessions.Set(w, ui.sessions.issueAt(user.Username, cutoff))
 	http.Redirect(w, r, "/settings?done=password", http.StatusSeeOther)
 }

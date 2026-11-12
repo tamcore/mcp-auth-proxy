@@ -73,8 +73,9 @@ type ceremony struct {
 
 // ponytail: in-memory, lost on restart; the user just starts again.
 type ceremonies struct {
-	mu sync.Mutex
-	m  map[string]ceremony
+	mu     sync.Mutex
+	m      map[string]ceremony
+	secure bool
 }
 
 // start stores a ceremony and sets the cookie that names it.
@@ -94,7 +95,7 @@ func (c *ceremonies) start(w http.ResponseWriter, data *webauthn.SessionData, us
 	c.m[id] = ceremony{data: *data, userID: userID, deadline: now.Add(ceremonyTTL)}
 	c.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: id, Path: "/", MaxAge: int(ceremonyTTL / time.Second),
-		HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteStrictMode})
 	return nil
 }
 
@@ -253,6 +254,6 @@ func (ui *WebUI) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 		}
 	}
 	ui.logger.Info("login ok", "user", user.Username, "method", "passkey", "remote", r.RemoteAddr)
-	Set(w, ui.sessions.IssueFor(user))
+	ui.sessions.Set(w, ui.sessions.IssueFor(user))
 	writeJSON(w, http.StatusOK, map[string]string{"redirect": safeNext(r.URL.Query().Get("next"))})
 }

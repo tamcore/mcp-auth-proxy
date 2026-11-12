@@ -113,6 +113,7 @@ const (
 	ToneOK    = "ok"
 	ToneDeny  = "deny"
 	ToneError = "error"
+	ToneAsk   = "ask"
 )
 
 // ResultData feeds result.tmpl.
@@ -122,4 +123,6 @@ type ResultData struct {
 	Message string
 	// Back is an optional link target shown as "Back to portal".
 	Back string
+	// Confirm, if set, labels a button that POSTs back to the current URL.
+	Confirm string
 }

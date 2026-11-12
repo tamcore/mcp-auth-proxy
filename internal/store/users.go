@@ -38,10 +38,14 @@ func HashPassword(pw string) (string, error) {
 // hash (password not set yet) never matches.
 func CheckPassword(hash, pw string) bool {
 	if hash == "" {
+		// Same bcrypt cost for unknown users, so timing does not reveal usernames.
+		_ = bcrypt.CompareHashAndPassword([]byte(noUserHash), []byte(pw))
 		return false
 	}
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
+
+const noUserHash = "$2a$10$pxZOwl1JSFsfog0AXY2.C.ESdBCMkq1gRVH.MoLgv3UwIRTeJqh7O"
 
 // CreateUser inserts a user.
 func (s *Store) CreateUser(ctx context.Context, u *User) error {

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
@@ -30,7 +29,6 @@ type authRoundTripper struct {
 	base   http.RoundTripper
 	up     *Upstream
 	header http.Header
-	mu     sync.Mutex
 }
 
 // RoundTrip implements http.RoundTripper.
@@ -86,8 +84,8 @@ func (rt *authRoundTripper) send(req *http.Request, token string) (*http.Respons
 		clone.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := rt.base.RoundTrip(clone)
-	if err == nil && req.Method == http.MethodPost {
-		// One JSON-RPC answer per POST; the long-lived SSE GET stream is not capped.
+	if err == nil && strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+		// One JSON-RPC answer; SSE streams (GET, or a streamed POST answer) stay uncapped.
 		resp.Body = http.MaxBytesReader(nil, resp.Body, maxResponseBytes)
 	}
 	return resp, err
@@ -115,10 +113,10 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 // refresh exchanges the refresh token for a new set and persists it, unless
 // the stored access token is no longer the one that failed: then another
 // request already rotated it, and the old refresh token may be spent.
-// ponytail: the lock is per instance; separate instances of one upstream can still refresh twice.
 func (rt *authRoundTripper) refresh(ctx context.Context, failed string) error {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+	lock := rt.up.store.TokenRefreshLock(rt.up.cfg.Name, rt.up.owner)
+	lock.Lock()
+	defer lock.Unlock()
 	cfg := rt.up.cfg.OAuth
 	if cfg == nil {
 		return errors.New("upstream: oauth not configured")

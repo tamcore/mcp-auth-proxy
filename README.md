@@ -1,15 +1,15 @@
 # mcp-auth-proxy
 
-A personal [Model Context Protocol](https://modelcontextprotocol.io) auth proxy. It fronts several MCP servers ("upstreams") behind **one endpoint**. Each AI client (Claude, ChatGPT, Cursor, ...) gets its own key and MCP URL, and **every tool call is gated behind a one-time code pushed to your phone via [ntfy](https://ntfy.sh)**.
+A personal [Model Context Protocol](https://modelcontextprotocol.io) auth proxy. It fronts several MCP servers ("upstreams") behind **one endpoint**. Each AI client (Claude, ChatGPT, Cursor, ...) gets its own key and MCP URL, and **every proxied tool call is gated behind a one-time code**, pushed to your phone via [ntfy](https://ntfy.sh) and shown in the web portal.
 
 - **One endpoint, many upstreams**: Streamable HTTP or stdio MCP servers, exposed to clients as `{upstream}__{tool}`.
 - **Per-client keys**: revoke one client without touching the others; see when each key was last used.
 - **A human in the loop**: a blocked call tells the client to ask you for the code. You type it, or tap **Approve** in the push or the web portal. The session then allows calls for a configurable TTL (default 8h).
-- **Multi-user web portal**: invite links instead of shared passwords, passkeys, per-user push targets, per-user upstream OAuth accounts, and an audit log of every tool call.
+- **Multi-user web portal**: invite links instead of shared passwords, passkeys, per-user push targets, per-user upstream OAuth accounts, and an audit log of proxied tool calls.
 
 ## Identity is never authorization
 
-Clients authenticate with a static `mak_…` key or an OAuth `map_…` token, and upstreams can use OAuth too. That only proves *who* is calling: the right to list tools and ask for authorization. **Every `tools/call` still requires the one-time code.** There is no path from "authenticated" to "authorized".
+Clients authenticate with a static `mak_…` key or an OAuth `map_…` token, and upstreams can use OAuth too. That only proves *who* is calling: the right to list tools and ask for authorization. **Every proxied tool call still requires the one-time code.** There is no path from "authenticated" to "authorized".
 
 ## Quick start
 

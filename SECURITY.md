@@ -55,7 +55,7 @@ The database stores:
 - **Plaintext, because the proxy must present them:** upstream OAuth access and refresh tokens, per-user upstream headers (for example a bearer token), and per-user ntfy tokens. Protect the database and its backups accordingly.
 - **No secret:** passkey public keys and sign counts, audit entries, users, and upstream definitions.
 
-Secrets are shown once at creation and never again. Logs are JSON, carry only hashes, and never carry a token, code, or password.
+Secrets are shown once at creation and never again. Logs are JSON, carry only hashes, and never carry a token or password. One exception: for a key without an owner (`key create` without `--user`), the one-time code and the signed Approve/Deny URLs are logged, because there is no other place to deliver them.
 
 ## Deployment checklist
 

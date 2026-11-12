@@ -22,7 +22,7 @@ Open requests are always listed at the top of the portal with their code and App
 
 ## Push notifications
 
-Push notifications are per user. Under **Settings** every user enters their own ntfy server, topic and optional access token. Saving checks that the URL is https (plain http only for loopback), that `/v1/health` reports a healthy ntfy server, and sends a test push. Without a push target, codes appear only in the portal. Keys created with the CLI have no owner; their codes and Approve/Deny URLs are logged. A failed publish is logged at WARN.
+Push notifications are per user. Under **Settings** every user enters their own ntfy server, topic and optional access token. Saving checks that the URL is https (plain http only for loopback), that `/v1/health` reports a healthy ntfy server, and sends a test push. Without a push target, codes appear only in the portal. Keys created with the CLI without `--user` have no owner; their codes and Approve/Deny URLs are logged. A failed publish is logged at WARN.
 
 ## Settings and passkeys
 
@@ -30,7 +30,7 @@ Under **Settings** (`/settings`) users change their password (all their other br
 
 ## The OTP contract (what your AI client sees)
 
-1. The client calls a proxied tool (`{upstream}__{tool}`). `tools/list` is never gated; every `tools/call` is.
+1. The client calls a proxied tool (`{upstream}__{tool}`). `tools/list` and the `auth` tool are never gated; every proxied tool call is.
 2. Without a live session the call returns an error-shaped result:
 
    > Blocked: tool "echo__echo" on key "claude-laptop" requires a one-time code. Ask the owner for the 5-digit code from their phone notification or the web portal (expires …). Then call the `auth` tool with that code (argument `otp`) and retry this exact tool call.
@@ -52,7 +52,7 @@ Every user links their **own** upstream account in the portal; tokens are stored
 
 ```
 mcp-auth-proxy serve                          # run the proxy
-mcp-auth-proxy key create --label L [--upstreams a,b] [--ttl 8h] [--json]
+mcp-auth-proxy key create --label L [--user U] [--upstreams a,b] [--ttl 8h] [--json]
 mcp-auth-proxy key list
 mcp-auth-proxy key revoke <id>                # kills session + pending challenge
 mcp-auth-proxy upstream list|status

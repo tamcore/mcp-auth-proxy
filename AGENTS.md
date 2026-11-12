@@ -12,7 +12,7 @@ mcp-auth-proxy is a personal MCP auth proxy written in Go. It fronts several MCP
 
 ### Identity is never authorization
 
-OAuth 2.x exists on both sides, but it only grants an *identity*: the right to list tools and ask for authorization. Every `tools/call` still requires the one-time code. Do not add any path that lets an authenticated identity skip the gate.
+OAuth 2.x exists on both sides, but it only grants an *identity*: the right to list tools and ask for authorization. Every proxied tool call still requires the one-time code; only `tools/list` and the `auth` tool are ungated. Do not add any path that lets an authenticated identity skip the gate.
 
 ## Development workflow
 

@@ -1,6 +1,7 @@
-# mcp-auth-proxy configuration. Every key can be overridden by an environment
-# variable prefixed with MCP_PROXY_ (dots become underscores), e.g.
-# MCP_PROXY_SESSION_TTL=4h or MCP_PROXY_OTP_DIGITS=6.
+# mcp-auth-proxy configuration. Every scalar key can be overridden by an
+# environment variable prefixed with MCP_PROXY_ (dots become underscores), e.g.
+# MCP_PROXY_SESSION_TTL=4h or MCP_PROXY_OTP_DIGITS=6. users and admins take a
+# space-separated list; upstreams and oauth.clients are file-only.
 
 # Canonical public URL of this proxy. Used to build approve/deny button URLs
 # and the MCP URL shown by `key create`.

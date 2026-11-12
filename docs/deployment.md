@@ -16,12 +16,13 @@ sha256sum --ignore-missing -c mcp-auth-proxy_<version>_SHA256SUMS
 
 ## Container image
 
-The image is distroless, runs as `65532:65532`, has no shell, and works with a read-only root filesystem. All state lives in `/data`; mount a volume there.
+The image is distroless, runs as `65532:65532`, has no shell, and works with a read-only root filesystem. All state lives in `/data`; mount a directory there that `65532` can write.
 
 ```sh
+mkdir -p data && sudo chown 65532:65532 data
 docker run -d -p 8080:8080 \
   -v "$PWD/config.yaml:/etc/mcp-auth-proxy/config.yaml:ro" \
-  -v mcp-auth-proxy:/data \
+  -v "$PWD/data:/data" \
   -e MCP_PROXY_LISTEN_ADDR=0.0.0.0:8080 -e MCP_PROXY_STATE_DIR=/data \
   ghcr.io/tamcore/mcp-auth-proxy:<version> \
   serve --config /etc/mcp-auth-proxy/config.yaml

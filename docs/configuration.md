@@ -1,6 +1,6 @@
 # Configuration
 
-[config.example.yaml](../config.example.yaml) documents every key. Every key has an environment override prefixed `MCP_PROXY_` (dots become underscores), e.g. `MCP_PROXY_SESSION_TTL=4h` or `MCP_PROXY_OTP_DIGITS=6`.
+[config.example.yaml](../config.example.yaml) documents every key. Every scalar key has an environment override prefixed `MCP_PROXY_` (dots become underscores), e.g. `MCP_PROXY_SESSION_TTL=4h` or `MCP_PROXY_OTP_DIGITS=6`. `users` and `admins` take a space-separated list (`MCP_PROXY_USERS="alice bob"`). `upstreams` and `oauth.clients` are set in the file only.
 
 | Key | Default | Meaning |
 |-----|---------|---------|

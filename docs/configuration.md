@@ -23,4 +23,4 @@ Each upstream has exactly one of `url` (Streamable HTTP) or `command` (stdio). T
 
 ## Client-facing OAuth
 
-The proxy is an OAuth authorization server (authorization code + PKCE S256) for the clients in `oauth.clients`. A client either uses a static `mak_…` key or obtains a `map_…` access token through this flow. Either one is an identity only: every tool call still needs the one-time code.
+The proxy is an OAuth authorization server (authorization code + PKCE S256) for the clients in `oauth.clients`. A client either uses a static `mak_…` key or obtains a `map_…` access token through this flow. Either one is an identity only: every proxied tool call still needs the one-time code.

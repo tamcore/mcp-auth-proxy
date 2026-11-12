@@ -4,7 +4,7 @@ Rules for humans and AI agents that contribute to mcp-auth-proxy. These rules ar
 
 ## Project overview
 
-mcp-auth-proxy is a personal MCP auth proxy written in Go. It fronts several MCP servers ("upstreams") behind one endpoint. Each AI client gets its own key and MCP URL; every tool call is gated behind a one-time code pushed to the owner's phone via ntfy.
+mcp-auth-proxy is a personal MCP auth proxy written in Go. It fronts several MCP servers ("upstreams") behind one endpoint. Each AI client gets its own key and MCP URL; every proxied tool call is gated behind a one-time code pushed to the owner's phone via ntfy.
 
 - Go module: `github.com/tamcore/mcp-auth-proxy`.
 - MCP layer: the official `modelcontextprotocol/go-sdk` at the version in `go.mod`, on both the server and the client side.

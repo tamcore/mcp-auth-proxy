@@ -32,7 +32,7 @@ mcp-auth-proxy key create --label claude-laptop --config config.yaml
 # MCP URL:           http://127.0.0.1:8080/mcp/mak_…
 ```
 
-Point the AI client at the MCP URL, or at `/mcp` with `Authorization: Bearer mak_…`. Call `echo__echo`: the call is blocked, and because a CLI key has no owner, the one-time code appears in the proxy's log. Give the code to the client; it calls the `auth` tool and retries.
+Point the AI client at the MCP URL, or at `/mcp` with `Authorization: Bearer mak_…`. Call `echo__echo`: the call is blocked, and because a CLI key without `--user` has no owner, the one-time code appears in the proxy's log. Give the code to the client; it calls the `auth` tool and retries.
 
 For real use, sign in to the web portal with the invite link the proxy logs on start for each configured user, create keys there, and set your ntfy push target under **Settings**.
 

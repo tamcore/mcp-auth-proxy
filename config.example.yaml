@@ -28,7 +28,8 @@ otp:
 
 # Push notifications are per user: every user sets their own ntfy server,
 # topic and optional access token in the portal. There is no global ntfy
-# setting; keys created with the CLI (no owner) log their codes instead.
+# setting; keys created with the CLI without --user (no owner) log their codes
+# instead.
 
 # Users of the multi-user instance. A user missing from the database is created
 # on start with a single-use invite link (logged each start until used) to set
@@ -65,7 +66,7 @@ upstreams:
   #                                             # upstream's oauth-protected-resource
 
 # Client-facing OAuth authorization server (authorization-code + PKCE S256).
-# Logging in grants identity only; every tool call still needs the OTP.
+# Logging in grants identity only; every proxied tool call still needs the OTP.
 oauth:
   token_ttl: 24h             # map_ access token lifetime
   authorize_code_ttl: 10m    # single-use authorization code lifetime

@@ -50,6 +50,7 @@ func TestMigrateBacksUpAndReportsPendingMigrations(t *testing.T) {
 		t.Fatalf("an existing snapshot from a failed attempt must not block startup: %v", err)
 	}
 	assertOwnerOnly(t, path+".pre-v0003.bak")
+	assertSnapshotHolds(t, path+".pre-v0003.bak", 2)
 	bak, err := sql.Open("sqlite", "file:"+path+".pre-v0002.bak?mode=ro")
 	if err != nil {
 		t.Fatal(err)
@@ -70,5 +71,38 @@ func assertOwnerOnly(t *testing.T, path string) {
 	}
 	if mode := info.Mode().Perm(); mode != 0o600 {
 		t.Fatalf("%s: mode %o, want 600 (it holds tokens)", filepath.Base(path), mode)
+	}
+}
+
+// assertSnapshotHolds checks that a backup is a database at schema version v.
+func assertSnapshotHolds(t *testing.T, path string, v int) {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	var got int
+	err = db.QueryRowContext(context.Background(), `SELECT MAX(version) FROM schema_migrations`).Scan(&got)
+	if err != nil || got != v {
+		t.Fatalf("%s must be a snapshot at version %d, got %d (%v)", filepath.Base(path), v, got, err)
+	}
+}
+
+func TestMigrateRefusesAnEditedAppliedMigration(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "proxy.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{db: db, path: path}
+	defer func() { _ = s.Close() }()
+	if err := s.Migrate(ctx, fstest.MapFS{mig1: {Data: []byte("CREATE TABLE a (x TEXT) STRICT;")}}); err != nil {
+		t.Fatal(err)
+	}
+	edited := fstest.MapFS{mig1: {Data: []byte("CREATE TABLE a (x TEXT, y TEXT) STRICT;")}}
+	if err := s.Migrate(ctx, edited); err == nil {
+		t.Fatal("a shipped migration that differs from the applied one must stop the start")
 	}
 }

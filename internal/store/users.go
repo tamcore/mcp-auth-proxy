@@ -75,14 +75,24 @@ func (s *Store) SetUserPassword(ctx context.Context, userID, hash string) error 
 }
 
 // SetUserDisabled temporarily disables or re-enables a user.
+// It never disables the last enabled admin: the check and the update are one
+// statement, so two admins disabling each other at once cannot both succeed.
 func (s *Store) SetUserDisabled(ctx context.Context, userID string, disabled bool) error {
-	d := 0
+	q, args := `UPDATE users SET disabled = 0 WHERE id = ?`, []any{userID}
 	if disabled {
-		d = 1
+		q = `UPDATE users SET disabled = 1 WHERE id = ? AND (admin = 0 OR
+			(SELECT COUNT(*) FROM users WHERE admin = 1 AND disabled = 0 AND id != ?) > 0)`
+		args = append(args, userID)
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET disabled = ? WHERE id = ?`, d, userID)
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return fmt.Errorf("store: set disabled: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		if _, err := s.UserByID(ctx, userID); err != nil {
+			return err
+		}
+		return ErrLastAdmin
 	}
 	return nil
 }
@@ -245,9 +255,9 @@ INSERT INTO invites (token_hash, user_id, created_at, expires_at) VALUES (?, ?, 
 	return token, nil
 }
 
-// ConsumeInvite atomically marks the token used and returns its user, or
-// ErrNotFound for unknown/expired/used tokens.
-func (s *Store) ConsumeInvite(ctx context.Context, token string, now time.Time) (*User, error) {
+// ConsumeInvite atomically marks the token used, sets the user's password
+// hash, and returns the user, or ErrNotFound for unknown/expired/used tokens.
+func (s *Store) ConsumeInvite(ctx context.Context, token, passwordHash string, now time.Time) (*User, error) {
 	hash := HashSecret(token)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -275,6 +285,9 @@ func (s *Store) ConsumeInvite(ctx context.Context, token string, now time.Time) 
 	}
 	q := `UPDATE invites SET used_at = ? WHERE token_hash = ?`
 	if _, err := tx.ExecContext(ctx, q, FormatTime(now), hash); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

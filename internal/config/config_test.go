@@ -100,6 +100,48 @@ listen_addr: 127.0.0.1:8080
 ops_listen_addr: 127.0.0.1:8080
 upstreams: [{name: e, command: [x]}]
 `,
+		"relative base_url": `
+base_url: proxy.example
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+`,
+		"base_url with a path": `
+base_url: https://proxy.example/mcp
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+`,
+		"base_url with userinfo": `
+base_url: https://u:p@proxy.example
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+`,
+		"base_url with an odd scheme": `
+base_url: ftp://proxy.example
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+`,
+		"duplicate oauth client_id": `
+base_url: http://x
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+oauth:
+  clients:
+    - {client_id: c, name: A, redirect_uris: [https://a/cb]}
+    - {client_id: c, name: B, redirect_uris: [https://b/cb]}
+`,
+		"admin name with spaces": `
+base_url: http://x
+state_dir: ./data
+users: [alice]
+admins: ["alice "]
+upstreams: [{name: e, command: [x]}]
+`,
+		"user name with spaces": `
+base_url: http://x
+state_dir: ./data
+users: ["alice "]
+upstreams: [{name: e, command: [x]}]
+`,
 		"confidential oauth client": `
 base_url: http://x
 state_dir: ./data
@@ -141,5 +183,28 @@ oauth:
 	}
 	if cfg.OAuth.TokenTTL != 24*time.Hour {
 		t.Fatalf("token ttl default: %v", cfg.OAuth.TokenTTL)
+	}
+}
+
+func TestBaseURLForms(t *testing.T) {
+	for _, ok := range []string{"http://127.0.0.1:8080", "https://proxy.example", "https://proxy.example/"} {
+		body := "base_url: " + ok + "\nstate_dir: ./data\nupstreams: [{name: e, command: [x]}]\n"
+		if _, err := Load(writeCfg(t, body)); err != nil {
+			t.Fatalf("%s must be accepted: %v", ok, err)
+		}
+	}
+}
+
+func TestBaseURLIsNormalized(t *testing.T) {
+	for _, raw := range []string{"HTTPS://Proxy.Example", "https://proxy.example/"} {
+		body := "base_url: " + raw + "\nstate_dir: ./data\nupstreams: [{name: e, command: [x]}]\n"
+		cfg, err := Load(writeCfg(t, body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.BaseURL != "https://proxy.example" {
+			t.Fatalf("%s became %q: HSTS and Secure cookies need a lowercase https:// prefix, "+
+				"approve URLs need no trailing slash", raw, cfg.BaseURL)
+		}
 	}
 }

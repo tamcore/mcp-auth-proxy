@@ -61,9 +61,9 @@ func TestRefreshRotationPersists(t *testing.T) {
 		Name: "api",
 		URL:  apiSrv.URL,
 		OAuth: &config.UpstreamOAuthConfig{
-			AuthorizeURL: "http://unused/authorize",
+			AuthorizeURL: unusedAuthorize,
 			TokenURL:     tokenSrv.URL,
-			ClientID:     "cid",
+			ClientID:     testClientID,
 			Resource:     "https://api/mcp",
 		},
 	}
@@ -173,7 +173,7 @@ func TestPersistent401IsRetriedOnceWithTheSameBody(t *testing.T) {
 	}))
 	defer apiSrv.Close()
 	cfg := config.UpstreamConfig{Name: "flaky", URL: apiSrv.URL, OAuth: &config.UpstreamOAuthConfig{
-		AuthorizeURL: "http://unused/authorize", TokenURL: tokenSrv.URL, ClientID: "cid"}}
+		AuthorizeURL: unusedAuthorize, TokenURL: tokenSrv.URL, ClientID: testClientID}}
 	stale := &store.UpstreamToken{Upstream: "flaky", AccessToken: "a", RefreshToken: "r"}
 	if err := st.SaveUpstreamToken(ctx, stale); err != nil {
 		t.Fatal(err)

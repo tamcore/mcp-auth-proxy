@@ -75,7 +75,13 @@ type cachedServer struct {
 	srv       *mcp.Server
 	upstreams string
 	userID    string
+	// retryAt is set for a build with a failed upstream; it is rebuilt after.
+	retryAt time.Time
 }
+
+// rebuildAfter spaces out retries of a failed upstream, so it is not asked
+// again on every request.
+const rebuildAfter = 30 * time.Second
 
 // ServerFor returns the cached per-key MCP server, building it on first use.
 func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, error) {
@@ -83,24 +89,25 @@ func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, err
 	p.mu.Lock()
 	c, ok := p.servers[key.ID]
 	p.mu.Unlock()
-	if ok && c.upstreams == sig {
+	if ok && c.upstreams == sig && (c.retryAt.IsZero() || time.Now().Before(c.retryAt)) {
 		return c.srv, nil
 	}
 	srv, complete := p.build(ctx, key)
-	if complete {
-		p.mu.Lock()
-		c := cachedServer{srv: srv, upstreams: sig}
-		if key.UserID != nil {
-			c.userID = *key.UserID
-		}
-		p.servers[key.ID] = c
-		p.mu.Unlock()
+	c = cachedServer{srv: srv, upstreams: sig}
+	if key.UserID != nil {
+		c.userID = *key.UserID
 	}
+	if !complete {
+		c.retryAt = time.Now().Add(rebuildAfter)
+	}
+	p.mu.Lock()
+	p.servers[key.ID] = c
+	p.mu.Unlock()
 	return srv, nil
 }
 
 // build assembles the key's server. A failing upstream only drops its own
-// tools; the result is then incomplete and not cached, so it is retried.
+// tools; the result is then incomplete and rebuilt after rebuildAfter.
 func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, bool) {
 	srv := mcp.NewServer(version.Implementation(), nil)
 	p.addAuthTool(srv, key)

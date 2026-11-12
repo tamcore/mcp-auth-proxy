@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
@@ -30,7 +30,6 @@ type authRoundTripper struct {
 	base   http.RoundTripper
 	up     *Upstream
 	header http.Header
-	mu     sync.Mutex
 }
 
 // RoundTrip implements http.RoundTripper.
@@ -44,7 +43,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		return resp, err
 	}
 	_ = resp.Body.Close()
-	if err := rt.refresh(req.Context()); err != nil {
+	if err := rt.refresh(req.Context(), token); err != nil {
 		return nil, err
 	}
 	if token, err = rt.token(req.Context()); err != nil {
@@ -85,7 +84,18 @@ func (rt *authRoundTripper) send(req *http.Request, token string) (*http.Respons
 	if token != "" {
 		clone.Header.Set("Authorization", "Bearer "+token)
 	}
-	return rt.base.RoundTrip(clone)
+	resp, err := rt.base.RoundTrip(clone)
+	if err == nil && !isEventStream(resp.Header.Get("Content-Type")) {
+		// One JSON-RPC answer; SSE streams (GET, or a streamed POST answer) stay uncapped.
+		resp.Body = http.MaxBytesReader(nil, resp.Body, maxResponseBytes)
+	}
+	return resp, err
+}
+
+// isEventStream reports an SSE answer; media types compare case-insensitively.
+func isEventStream(contentType string) bool {
+	mt, _, err := mime.ParseMediaType(contentType)
+	return err == nil && mt == "text/event-stream"
 }
 
 func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
@@ -97,7 +107,7 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if tok.ExpiresAt != nil && time.Now().After(tok.ExpiresAt.Add(-30*time.Second)) && tok.RefreshToken != "" {
-		if err := rt.refresh(ctx); err != nil {
+		if err := rt.refresh(ctx, tok.AccessToken); err != nil {
 			rt.up.logger.Warn("upstream token refresh failed", "upstream", rt.up.cfg.Name, "error", err)
 		}
 		if tok2, err2 := rt.up.store.GetUpstreamToken(ctx, rt.up.cfg.Name, rt.up.owner); err2 == nil {
@@ -107,10 +117,13 @@ func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {
 	return tok.AccessToken, nil
 }
 
-// refresh exchanges the refresh token for a new set and persists it.
-func (rt *authRoundTripper) refresh(ctx context.Context) error {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+// refresh exchanges the refresh token for a new set and persists it, unless
+// the stored access token is no longer the one that failed: then another
+// request already rotated it, and the old refresh token may be spent.
+func (rt *authRoundTripper) refresh(ctx context.Context, failed string) error {
+	lock := rt.up.store.TokenRefreshLock(rt.up.cfg.Name, rt.up.owner)
+	lock.Lock()
+	defer lock.Unlock()
 	cfg := rt.up.cfg.OAuth
 	if cfg == nil {
 		return errors.New("upstream: oauth not configured")
@@ -121,6 +134,9 @@ func (rt *authRoundTripper) refresh(ctx context.Context) error {
 	}
 	if err != nil {
 		return err
+	}
+	if tok.AccessToken != failed {
+		return nil
 	}
 	if tok.RefreshToken == "" {
 		return ErrNoToken

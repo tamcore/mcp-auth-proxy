@@ -52,7 +52,7 @@ func TestChangePassword(t *testing.T) {
 	old := login(t, ts, testBob, linkPw)
 	other := login(t, ts, testBob, linkPw)
 	change := func(cur, pw, pw2 string) *http.Response {
-		form := url.Values{"current": {cur}, pwField: {pw}, "password2": {pw2}}
+		form := url.Values{"current": {cur}, pwField: {pw}, pw2Field: {pw2}}
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/settings/password", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.AddCookie(old)

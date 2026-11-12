@@ -71,6 +71,11 @@ type ceremony struct {
 	deadline time.Time
 }
 
+// maxCeremonies caps open ceremonies: passkey login begins unauthenticated.
+// A full map drops its oldest ceremony instead of refusing, so a flood cannot
+// lock out real logins, only make one retry.
+const maxCeremonies = 1000
+
 // ponytail: in-memory, lost on restart; the user just starts again.
 type ceremonies struct {
 	mu     sync.Mutex
@@ -91,6 +96,15 @@ func (c *ceremonies) start(w http.ResponseWriter, data *webauthn.SessionData, us
 		if now.After(v.deadline) {
 			delete(c.m, k)
 		}
+	}
+	if len(c.m) >= maxCeremonies {
+		oldest := ""
+		for k, v := range c.m {
+			if oldest == "" || v.deadline.Before(c.m[oldest].deadline) {
+				oldest = k
+			}
+		}
+		delete(c.m, oldest)
 	}
 	c.m[id] = ceremony{data: *data, userID: userID, deadline: now.Add(ceremonyTTL)}
 	c.mu.Unlock()
@@ -136,7 +150,11 @@ func (ui *WebUI) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	creation, data, err := ui.webauthn.BeginRegistration(pu,
-		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
+		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+			ResidentKey:        protocol.ResidentKeyRequirementRequired,
+			RequireResidentKey: protocol.ResidentKeyRequired(),
+			UserVerification:   protocol.VerificationRequired,
+		}),
 		webauthn.WithExclusions(webauthn.Credentials(pu.creds).CredentialDescriptors()))
 	if err == nil {
 		err = ui.ceremonies.start(w, data, user.ID)
@@ -213,7 +231,7 @@ func (ui *WebUI) handleLoginPasskeyBegin(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	assertion, data, err := ui.webauthn.BeginDiscoverableLogin(
-		webauthn.WithUserVerification(protocol.VerificationPreferred))
+		webauthn.WithUserVerification(protocol.VerificationRequired))
 	if err == nil {
 		err = ui.ceremonies.start(w, data, "")
 	}
@@ -248,10 +266,15 @@ func (ui *WebUI) handleLoginPasskeyFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user := found.(*passkeyUser).user
-	if raw, err := json.Marshal(cred); err == nil {
-		if err := ui.store.MarkPasskeyUsed(r.Context(), cred.ID, string(raw), time.Now().UTC()); err != nil {
-			ui.logger.Warn("mark passkey used", "user", user.Username, "error", err)
-		}
+	// The stored sign count must advance, or a cloned key goes undetected.
+	raw, err := json.Marshal(cred)
+	if err == nil {
+		err = ui.store.MarkPasskeyUsed(r.Context(), cred.ID, string(raw), time.Now().UTC())
+	}
+	if err != nil {
+		ui.logger.Error("mark passkey used", "user", user.Username, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{errorField: "could not record the login"})
+		return
 	}
 	ui.logger.Info("login ok", "user", user.Username, "method", "passkey", "remote", r.RemoteAddr)
 	ui.sessions.Set(w, ui.sessions.IssueFor(user))

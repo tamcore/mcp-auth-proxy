@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -146,5 +148,47 @@ func TestUpstreamWithoutOAuthNeverSendsAStoredToken(t *testing.T) {
 	_ = resp.Body.Close()
 	if auth := got.Load().(string); auth != "" {
 		t.Fatalf("a user upstream named like a linked config upstream got %q", auth)
+	}
+}
+
+func TestPersistent401IsRetriedOnceWithTheSameBody(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "proxy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer tokenSrv.Close()
+	var hits atomic.Int32
+	var bodies []string
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer apiSrv.Close()
+	cfg := config.UpstreamConfig{Name: "flaky", URL: apiSrv.URL, OAuth: &config.UpstreamOAuthConfig{
+		AuthorizeURL: "http://unused/authorize", TokenURL: tokenSrv.URL, ClientID: "cid"}}
+	stale := &store.UpstreamToken{Upstream: "flaky", AccessToken: "a", RefreshToken: "r"}
+	if err := st.SaveUpstreamToken(ctx, stale); err != nil {
+		t.Fatal(err)
+	}
+	u := &Upstream{cfg: cfg, store: st, httpc: apiSrv.Client()}
+	hc := u.httpClientWithAuth()
+	resp, err := hc.Post(apiSrv.URL, "application/json", strings.NewReader(`{"jsonrpc":"2.0"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized || hits.Load() != 2 {
+		t.Fatalf("status %d after %d requests, want one retry then 401", resp.StatusCode, hits.Load())
+	}
+	if bodies[1] != bodies[0] {
+		t.Fatalf("retry lost the request body: %q vs %q", bodies[1], bodies[0])
 	}
 }

@@ -25,7 +25,7 @@ const clientIDFormKey = "client_id"
 var ErrNoToken = errors.New("upstream: no stored oauth token")
 
 // authRoundTripper injects the stored bearer token, applies static headers, and
-// on a 401 refreshes the token once, persists the rotated set, and retries.
+// on a 401 refreshes the token, persists the rotated set, and retries once.
 type authRoundTripper struct {
 	base   http.RoundTripper
 	up     *Upstream
@@ -35,13 +35,47 @@ type authRoundTripper struct {
 
 // RoundTrip implements http.RoundTripper.
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	var token string
-	if rt.up.OAuth() {
-		var err error
-		if token, err = rt.currentToken(req.Context()); err != nil && !errors.Is(err, ErrNoToken) {
+	token, err := rt.token(req.Context())
+	if err != nil {
+		return nil, err
+	}
+	resp, err := rt.send(req, token)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || !rt.up.OAuth() {
+		return resp, err
+	}
+	_ = resp.Body.Close()
+	if err := rt.refresh(req.Context()); err != nil {
+		return nil, err
+	}
+	if token, err = rt.token(req.Context()); err != nil {
+		return nil, err
+	}
+	retry := req
+	if req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
 			return nil, err
 		}
+		retry = req.Clone(req.Context())
+		retry.Body = body
 	}
+	return rt.send(retry, token)
+}
+
+// token returns the stored bearer token, or "" for an upstream without oauth
+// config or without a linked token.
+func (rt *authRoundTripper) token(ctx context.Context) (string, error) {
+	if !rt.up.OAuth() {
+		return "", nil
+	}
+	token, err := rt.currentToken(ctx)
+	if errors.Is(err, ErrNoToken) {
+		return "", nil
+	}
+	return token, err
+}
+
+func (rt *authRoundTripper) send(req *http.Request, token string) (*http.Response, error) {
 	clone := req.Clone(req.Context())
 	for k, vs := range rt.header {
 		for _, v := range vs {
@@ -51,18 +85,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	if token != "" {
 		clone.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := rt.base.RoundTrip(clone)
-	if err != nil {
-		return resp, err
-	}
-	if resp.StatusCode == http.StatusUnauthorized && rt.up.OAuth() {
-		_ = resp.Body.Close()
-		if err := rt.refresh(req.Context()); err != nil {
-			return nil, err
-		}
-		return rt.RoundTrip(req)
-	}
-	return resp, nil
+	return rt.base.RoundTrip(clone)
 }
 
 func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {

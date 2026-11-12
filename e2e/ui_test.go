@@ -3,6 +3,9 @@
 package e2e
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -115,13 +118,13 @@ func TestUIPortalFlow(t *testing.T) {
 	must(t, expect.Locator(key.GetByText("revoked")).ToBeVisible())
 
 	must(t, page.Locator("#up-name").Fill("mine"))
-	must(t, page.Locator("#up-url").Fill("https://example.invalid/mcp"))
+	must(t, page.Locator("#up-url").Fill(httpMCPUpstream(t)))
 	must(t, page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Add server"}).Click())
 	own := page.GetByTestId("server").Filter(playwright.LocatorFilterOptions{HasText: "mine"})
 	must(t, own.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Tools"}).Click())
 	dialog := page.Locator("#tools-dialog")
 	must(t, expect.Locator(dialog).ToBeVisible())
-	must(t, expect.Locator(dialog.Locator("[data-tools-status]")).ToContainText("Could not reach mine"))
+	must(t, expect.Locator(dialog.Locator("[data-tools-list] li").First()).ToContainText("ping"))
 	must(t, dialog.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Close"}).Click())
 	echo := page.GetByTestId("server").Filter(playwright.LocatorFilterOptions{HasText: "global"}).First()
 	must(t, echo.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Tools"}).Click())
@@ -306,4 +309,18 @@ func TestUIPasskeysUnavailable(t *testing.T) {
 	button := page.GetByRole("button", playwright.PageGetByRoleOptions{Name: "Sign in with a passkey"})
 	must(t, expect.Locator(button).ToBeDisabled())
 	must(t, expect.Locator(page.GetByText("This browser does not offer passkeys")).ToBeVisible())
+}
+
+// httpMCPUpstream serves one tool over streamable HTTP, for a user's own server.
+func httpMCPUpstream(t *testing.T) string {
+	t.Helper()
+	srv := mcp.NewServer(&mcp.Implementation{Name: "own-upstream", Version: "dev"}, nil)
+	mcp.AddTool(srv, &mcp.Tool{Name: "ping", Description: "ping"},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+			return &mcp.CallToolResult{}, nil, nil
+		})
+	ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
+		&mcp.StreamableHTTPOptions{Stateless: true}))
+	t.Cleanup(ts.Close)
+	return ts.URL
 }

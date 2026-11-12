@@ -55,6 +55,9 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 		return nil, err
 	}
 	web := webui.New(st, cfg, signSecret, pages, g, logger)
+	if proxy != nil {
+		web.OnUpstreamsChanged = proxy.ForgetUser
+	}
 	as.CurrentUser = func(r *http.Request) *store.User {
 		u, _ := web.Sessions().User(r, st)
 		return u

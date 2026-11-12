@@ -119,3 +119,32 @@ func TestNoTokenIsNotFatal(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 }
+
+func TestUpstreamWithoutOAuthNeverSendsAStoredToken(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "proxy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	operator := &store.UpstreamToken{Upstream: "linked", AccessToken: "operator-token"}
+	if err := st.SaveUpstreamToken(ctx, operator); err != nil {
+		t.Fatal(err)
+	}
+	var got atomic.Value
+	got.Store("")
+	userSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.Store(r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer userSrv.Close()
+	u := NewFromConfig(config.UpstreamConfig{Name: "linked", URL: userSrv.URL}, st, userSrv.Client(), nil)
+	resp, err := u.httpClientWithAuth().Get(userSrv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if auth := got.Load().(string); auth != "" {
+		t.Fatalf("a user upstream named like a linked config upstream got %q", auth)
+	}
+}

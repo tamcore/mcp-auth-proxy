@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -129,12 +130,33 @@ func TestChallengeSupersedeAndStatus(t *testing.T) {
 	if _, err := st.PendingChallenge(ctx, testKeyID, now); err != ErrNotFound {
 		t.Fatalf("expired pending must read not-found, got %v", err)
 	}
-	if err := st.UpdateChallenge(ctx, "c3", ChallengeApproved, 1); err != nil {
+}
+
+func TestChallengeReserveAndResolveOnlyWhilePending(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	if err := st.CreateKey(ctx, newTestKey(testKeyID, "h", now)); err != nil {
 		t.Fatal(err)
 	}
-	got3, _ := st.ChallengeByID(ctx, "c3")
-	if got3.Status != ChallengeApproved || got3.Attempts != 1 {
-		t.Fatalf("update failed: %+v", got3)
+	if err := st.CreateChallenge(ctx, newTestChallenge("c1", "h1", "t", now, now.Add(time.Minute))); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.ReserveAttempt(ctx, "c1", 1); err != nil || n != 1 {
+		t.Fatalf("reserve: %d %v", n, err)
+	}
+	if _, err := st.ReserveAttempt(ctx, "c1", 1); !errors.Is(err, ErrNotPending) {
+		t.Fatalf("no attempt left must be ErrNotPending, got %v", err)
+	}
+	if err := st.ResolveChallenge(ctx, "c1", ChallengeApproved); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ResolveChallenge(ctx, "c1", ChallengeDenied); !errors.Is(err, ErrNotPending) {
+		t.Fatalf("second resolve must be ErrNotPending, got %v", err)
+	}
+	got, _ := st.ChallengeByID(ctx, "c1")
+	if got.Status != ChallengeApproved || got.Attempts != 1 {
+		t.Fatalf("got %+v", got)
 	}
 }
 

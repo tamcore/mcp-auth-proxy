@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -149,11 +151,33 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 	return tx.Commit()
 }
 
-// UpdateChallenge sets status and the attempts counter of one challenge.
-func (s *Store) UpdateChallenge(ctx context.Context, id, status string, attempts int) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE challenges SET status = ?, attempts = ? WHERE id = ?`, status, attempts, id)
+// ReserveAttempt counts one OTP attempt on a pending challenge before the code
+// is checked, so parallel guesses never exceed max; it returns the new count,
+// or ErrNotPending when no attempt is left.
+func (s *Store) ReserveAttempt(ctx context.Context, id string, maxAttempts int) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`UPDATE challenges SET attempts = attempts + 1 WHERE id = ? AND status = ? AND attempts < ? RETURNING attempts`,
+		id, ChallengePending, maxAttempts).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotPending
+	}
 	if err != nil {
-		return fmt.Errorf("store: update challenge: %w", err)
+		return 0, fmt.Errorf("store: reserve attempt: %w", err)
+	}
+	return n, nil
+}
+
+// ResolveChallenge moves a pending challenge to status, or returns
+// ErrNotPending if another request resolved it first.
+func (s *Store) ResolveChallenge(ctx context.Context, id, status string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE challenges SET status = ? WHERE id = ? AND status = ?`,
+		status, id, ChallengePending)
+	if err != nil {
+		return fmt.Errorf("store: resolve challenge: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return ErrNotPending
 	}
 	return nil
 }

@@ -1,0 +1,58 @@
+package notices
+
+// licenceDigests pins, per module, the SHA-256 of the licence files a human
+// read (see licenceDigest). A changed licence text fails the generator until
+// someone re-reads it, checks the SPDX entry, and updates the digest here.
+// digestGoAuthors is the BSD-3-Clause LICENSE the golang.org/x modules share.
+const digestGoAuthors = "15a7908f982fda5955ff467804801d374cc8a340a5c274e7da7e3a01c2bd059d"
+
+var licenceDigests = map[string]string{
+	"github.com/beorn7/perks":                "3a818f9c62694af8fd94f479c8d14d6ac3cb93137c1728baeddce07c669124fc",
+	"github.com/cespare/xxhash/v2":           "3c5df56941e231d48272b87bdb4a61f8c4bc151583449b708d11c70581de6857",
+	"github.com/dustin/go-humanize":          "ed46783c68b4ce73bdb049b2f5e1a2cc2387c4fbf70f82b27acd98772aacf7e5",
+	"github.com/fsnotify/fsnotify":           "d0a951ed4289c978843599314a54b32822da4764f5fee5cdb8c0d2cbcd92e875",
+	"github.com/fxamacker/cbor/v2":           "5ecb5c63ba9b671c6ae695d36d5cdef176a6ee50e46a747a3c5733f6c2d72ab7",
+	"github.com/go-viper/mapstructure/v2":    "b0d2627284dc10666f113778c50e187fe0fa81f9f661aa4547abcd38c214e3cb",
+	"github.com/go-webauthn/webauthn":        "4d9eebbe3a4fb3f4aac4a2eeb286f183acfbbad942bba37379e525c4fe4835f9",
+	"github.com/go-webauthn/x":               "6ee774447aee7e132e1fc6d6836ddf3f0038de58179857358cc61e6232a5b14f",
+	"github.com/golang-jwt/jwt/v5":           "28576a4b5baebab90e85d2e9f075ccee656ba094cdaf4a7cc6e6838a04e72063",
+	"github.com/google/go-tpm":               "139a1f027991337f20485a23592df0d4012ea54b8d3bc303a0b8be163c0de3a7",
+	"github.com/google/jsonschema-go":        "1170a5f0dd605ab2e9d91ff0d3bb10f790c1a591c0ee82c9ad0ce5d1e36e5979",
+	"github.com/google/uuid":                 "725d846168e7ebf21273e1b1eb586a1c8e15bc80eef8ba2b7c53a6d6cbd34a17",
+	"github.com/mattn/go-isatty":             "965a50437d18e0b0f7b529383f452ec6402ff38c59654e08df922e03ffe557c7",
+	"github.com/modelcontextprotocol/go-sdk": "4bdb828982bf9fe83d8986c85801826559d792e7103a1aae2eb9b46be8ffaa4e",
+	"github.com/munnerz/goautoneg":           "c6485a62e3034b8312d98df6f418d841c16f9ed6ad97d9321d78e3efa84e4c3e",
+	"github.com/ncruces/go-strftime":         "62e4217cdf78f12f14f9fc5ff3c51bcd3984ffe7a55d6d118e44fb0bf3c02df9",
+	"github.com/pelletier/go-toml/v2":        "0cc32db63626c6bf3379ac8ec4a220e47f7acaabf88a918aa98a18c61c9009da",
+	"github.com/philhofer/fwd":               "045b630e5b17c1e3e863e4f79700438c17d68d5fb4fd8a9b494e929a41ee5349",
+	"github.com/prometheus/client_golang":    "7efa8110578c799a2f3dbc3cbe74a9ec78f556e29b1e9760e9721b1a232e909f",
+	"github.com/prometheus/client_model":     "fd916357657fbe15a193486923e653602fdee2a03bc23e7062abff9a8e687dea",
+	"github.com/prometheus/common":           "2e4a84945c25fe7260eb1f02434690825d091b90246c478043992835f0c75c50",
+	"github.com/prometheus/procfs":           "cc450fcad31af3968bf8498e9a29d6cb45f3142a20b1e46cf264bc38c292cd7b",
+	"github.com/remyoudompheng/bigfft":       "c9e8f050860b79de5ff12989f0e8402239fd1b46e467ac94a548e93abc348250",
+	"github.com/sagikazarmark/locafero":      "8ee10768d72a6506f77c3d58e8b16e34087f52c93d7c07947534b87a68c97f23",
+	"github.com/segmentio/asm":               "3747b17cf6110029368d1b27fa7548129672a29c18a1bfc3273148ae7316b2ed",
+	"github.com/segmentio/encoding":          "61ca27574986e56ac92711db8b95db3cfa7ee5020e7189930c325320800f5100",
+	"github.com/sourcegraph/conc":            "91c54f4f2ac061aadfdaea468c3312c6a160885b796aef0d42666e90512d07b0",
+	"github.com/spf13/afero":                 "9645ded5f95d0cfd8b883b75302596a9f7f61f75a17167f8c13e13606ba41ca1",
+	"github.com/spf13/cast":                  "82004d4450f5d30b1128e9cee53c31d7fe5fa1f06b4c7a50d28940c5956542a1",
+	"github.com/spf13/cobra":                 "9645ded5f95d0cfd8b883b75302596a9f7f61f75a17167f8c13e13606ba41ca1",
+	"github.com/spf13/pflag":                 "190054dc730467da11b9af0b8d8adb00d37256d48a4770d3396bf960e5d53023",
+	"github.com/spf13/viper":                 "82004d4450f5d30b1128e9cee53c31d7fe5fa1f06b4c7a50d28940c5956542a1",
+	"github.com/subosito/gotenv":             "cc1add945c6420e413d20a19b039e53b3d5eeeafe4c5c308d4d07c4631a145d7",
+	"github.com/tinylib/msgp":                "ef2d1592fafbd6588ce3789f71e99d1e3f409887ecbce74f604e41b8d7c81edb",
+	"github.com/x448/float16":                "b6358b27a62d00084156ac8808b8fca67e3d2ed1290fcfc9cb726872e7273e7e",
+	"github.com/yosida95/uritemplate/v3":     "df396b3d1cebd3fc6d1a57d0bc113f56b18b739aa804d556c21309a4d2a99545",
+	"go.yaml.in/yaml/v3":                     "2606b60793016330e1c633289146b6d4b59f827570787e55116e536696966e2a",
+	"golang.org/x/crypto":                    digestGoAuthors,
+	"golang.org/x/oauth2":                    "e924f0b275775a321659fdb7f2257fd4028cc91c18f81593f753e1b1e0c3cbcf",
+	"golang.org/x/sync":                      digestGoAuthors,
+	"golang.org/x/sys":                       digestGoAuthors,
+	"golang.org/x/text":                      digestGoAuthors,
+	"golang.org/x/time":                      digestGoAuthors,
+	"google.golang.org/protobuf":             "c0930cd1bd369732dcef918eadae7b188a520cd8f1ee3ade24c29e1875c2bdf7",
+	"modernc.org/libc":                       "3cbab66de7ce13e39857f6be07a2a9ce981a528b40038bf68009b36f839e1d9d",
+	"modernc.org/mathutil":                   "705eade8e2374357ee5bcdd4c3c648741702b7b7135d5ff3a4322c13502c6645",
+	"modernc.org/memory":                     "4b44b3314f8ae6dec9f7e9408af5c7b87dccd16d1058b59dd31f81f981725d53",
+	"modernc.org/sqlite":                     "063a8832384c0530cf71856ecd21768923b62f8ba6c119472e4470b1cfd4384f",
+}

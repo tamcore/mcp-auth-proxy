@@ -274,3 +274,19 @@ func TestTokenEndpointFailClosed(t *testing.T) {
 		t.Fatal("redirect mismatch must fail")
 	}
 }
+
+func TestAuthorizeErrorsDoNotRevealWhichClientsExist(t *testing.T) {
+	s := newTestServer(t)
+	describe := func(mutate func(url.Values)) string {
+		q := authorizeQuery("v")
+		mutate(q)
+		rec := httptest.NewRecorder()
+		s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil))
+		return rec.Body.String()
+	}
+	unknown := describe(func(q url.Values) { q.Set("client_id", "nope") })
+	wrongURI := describe(func(q url.Values) { q.Set("redirect_uri", "https://evil.example/cb") })
+	if unknown != wrongURI {
+		t.Fatalf("an unknown client and a wrong redirect_uri must look the same:\n%s\n%s", unknown, wrongURI)
+	}
+}

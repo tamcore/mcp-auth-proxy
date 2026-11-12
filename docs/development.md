@@ -30,7 +30,7 @@ The e2e suite drives the web UI in headless Chromium via playwright-go. The firs
 
 ## Third-party notices
 
-`THIRD_PARTY_NOTICES.md` ships with every release. Regenerate it with `go run ./cmd/notices` after a dependency change; a test fails while it is stale. A new dependency needs a hand-read entry in `internal/notices/registry.go`.
+`THIRD_PARTY_NOTICES.md` ships with every release. Regenerate it with `go run ./cmd/notices` after a dependency change; a test fails while it is stale. A new dependency needs a hand-read entry in `internal/notices/registry.go` and its licence digest in `internal/notices/digests.go`; the generator prints the digest. When a dependency changes its licence text, the generator fails until someone re-reads it, checks the SPDX entry and updates the digest.
 
 ## Releases
 

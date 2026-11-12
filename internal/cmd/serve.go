@@ -103,10 +103,22 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	app := &http.Server{Addr: cfg.ListenAddr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	ops := &http.Server{Addr: cfg.OpsListenAddr, Handler: srv.OpsHandler(), ReadHeaderTimeout: 10 * time.Second}
+	app := newHTTPServer(cfg.ListenAddr, srv.Handler())
+	ops := newHTTPServer(cfg.OpsListenAddr, srv.OpsHandler())
 	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)
 	return serveUntilDone(ctx, logger, app, ops)
+}
+
+// newHTTPServer bounds how long a client may take to send a request and keep
+// an idle connection. No WriteTimeout: it would cut streamed MCP responses.
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
 }
 
 // serveUntilDone runs the servers until ctx ends or one of them fails, then

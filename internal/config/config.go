@@ -356,6 +356,10 @@ func (c *ClientConfig) validate(i int) error {
 	if len(c.RedirectURIs) == 0 {
 		errs = append(errs, fmt.Errorf("%s (%s): at least one redirect_uri is required", p, c.ClientID))
 	}
+	if c.Confidential {
+		errs = append(errs, fmt.Errorf("%s (%s): confidential clients are not supported (no client secrets); "+
+			"clients authenticate with PKCE", p, c.ClientID))
+	}
 	return errors.Join(errs...)
 }
 

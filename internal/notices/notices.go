@@ -26,6 +26,8 @@ package notices
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -128,6 +130,10 @@ func describe(mods []module) ([]entry, error) {
 // that the registry does not name is the dangerous case — it is a term the
 // notices would omit — so it fails rather than being copied unreviewed.
 func verifyLicenceFiles(mod module, notice moduleNotice) error {
+	if len(notice.Files) == 0 {
+		return fmt.Errorf("notices: registry entry for %s names no licence file", mod.Path)
+	}
+
 	found, err := licenceFiles(mod.Dir)
 	if err != nil {
 		return fmt.Errorf("notices: scanning %s: %w", mod.Path, err)
@@ -143,7 +149,38 @@ func verifyLicenceFiles(mod module, notice moduleNotice) error {
 			mod.Path, strings.Join(found, " "), strings.Join(want, " "))
 	}
 
+	digest, err := licenceDigest(mod, notice.Files)
+	if err != nil {
+		return err
+	}
+
+	if want := licenceDigests[mod.Path]; digest != want {
+		return fmt.Errorf(
+			"notices: the licence text of %s changed (digest %s, pinned %q): "+
+				"re-read it, check the SPDX entry, then update licenceDigests in internal/notices/digests.go",
+			mod.Path, digest, want)
+	}
+
 	return nil
+}
+
+// licenceDigest is the SHA-256 over the named licence files, in order. It pins
+// the texts a human read, so a changed licence fails here instead of shipping
+// under a stale SPDX entry.
+func licenceDigest(mod module, files []string) (string, error) {
+	h := sha256.New()
+
+	for _, name := range files {
+		raw, err := os.ReadFile(filepath.Join(mod.Dir, name))
+		if err != nil {
+			return "", fmt.Errorf("notices: reading %s %s: %w", mod.Path, name, err)
+		}
+
+		h.Write([]byte(name + "\n"))
+		h.Write(raw)
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // licenceFiles reports the sorted names of the licence-bearing files at the root

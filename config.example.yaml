@@ -75,4 +75,4 @@ oauth:
       name: Claude
       redirect_uris:
         - https://claude.ai/api/mcp/callback
-      confidential: false
+      # Public client with PKCE; confidential clients (client secrets) are not supported.

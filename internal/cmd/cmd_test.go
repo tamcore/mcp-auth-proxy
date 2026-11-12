@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,5 +80,15 @@ func TestVersionCommand(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "v1.2.3") || !strings.Contains(buf.String(), "abc123") {
 		t.Fatalf("version output: %q", buf.String())
+	}
+}
+
+func TestHTTPServersBoundSlowClients(t *testing.T) {
+	s := newHTTPServer(":0", http.NotFoundHandler())
+	if s.ReadHeaderTimeout <= 0 || s.ReadTimeout <= 0 || s.IdleTimeout <= 0 {
+		t.Fatalf("a slow client could hold a connection forever: %+v", s)
+	}
+	if s.WriteTimeout != 0 {
+		t.Fatal("a WriteTimeout would cut streamed MCP responses")
 	}
 }

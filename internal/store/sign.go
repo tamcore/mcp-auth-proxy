@@ -20,6 +20,9 @@ func EnsureSignSecret(stateDir string) ([]byte, error) {
 		if len(b) < 32 {
 			return nil, fmt.Errorf("store: %s is too short (%d bytes); refusing to use it as a signing secret", path, len(b))
 		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			return nil, fmt.Errorf("store: restrict %s: %w", path, err)
+		}
 		return b, nil
 	}
 	if !os.IsNotExist(err) {

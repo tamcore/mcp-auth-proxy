@@ -4,14 +4,22 @@ Work through the checklist in [SECURITY.md](../SECURITY.md#deployment-checklist)
 
 ## Release artifacts
 
-Each release has archives for linux and darwin (amd64, arm64), a multi-arch image `ghcr.io/tamcore/mcp-auth-proxy`, and the Helm chart at `oci://ghcr.io/tamcore/charts/mcp-auth-proxy`. The checksum file is signed keylessly with cosign. Verify a download with:
+Each release has archives for linux and darwin (amd64, arm64), a multi-arch image `ghcr.io/tamcore/mcp-auth-proxy`, and the Helm chart at `oci://ghcr.io/tamcore/charts/mcp-auth-proxy`. The checksum file and every image are signed keylessly with cosign by the release workflow. Verify a download with:
 
 ```sh
 cosign verify-blob --bundle mcp-auth-proxy_<version>_SHA256SUMS.bundle \
-  --certificate-identity-regexp 'https://github.com/tamcore/mcp-auth-proxy/.*' \
+  --certificate-identity-regexp '^https://github\.com/tamcore/mcp-auth-proxy/\.github/workflows/release\.yaml@refs/tags/v' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   mcp-auth-proxy_<version>_SHA256SUMS
 sha256sum --ignore-missing -c mcp-auth-proxy_<version>_SHA256SUMS
+```
+
+Verify an image the same way, and deploy it by digest:
+
+```sh
+cosign verify ghcr.io/tamcore/mcp-auth-proxy:<version> \
+  --certificate-identity-regexp '^https://github\.com/tamcore/mcp-auth-proxy/\.github/workflows/release\.yaml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
 ## Container image
@@ -30,7 +38,7 @@ docker run -d -p 8080:8080 \
 
 ## Kubernetes
 
-The Helm chart in [charts/mcp-auth-proxy](../charts/mcp-auth-proxy) runs a single-replica `Recreate` deployment (one SQLite database, one signing secret) with a PVC for `/data` and the config in a ConfigMap.
+The Helm chart in [charts/mcp-auth-proxy](../charts/mcp-auth-proxy) runs a single-replica `Recreate` deployment (one SQLite database, one signing secret) with a PVC for `/data` (an `emptyDir` with `persistence.enabled=false`, which loses all state on restart) and the config in a Secret, because upstream headers and OAuth client secrets in it are credentials.
 
 ```sh
 helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \

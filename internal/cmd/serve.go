@@ -116,7 +116,7 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 		Addr:              addr,
 		Handler:           h,
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
+		ReadTimeout:       2 * time.Minute,
 		IdleTimeout:       2 * time.Minute,
 	}
 }

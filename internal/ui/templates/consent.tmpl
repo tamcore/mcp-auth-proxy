@@ -9,9 +9,11 @@
       Logging in never authorizes tool calls.
     </div>
     <form method="post" action="/oauth/consent" class="space-y-4">
+      <input type="hidden" name="response_type" value="code">
       <input type="hidden" name="client_id" value="{{.ClientID}}">
       <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
       <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+      <input type="hidden" name="code_challenge_method" value="S256">
       <input type="hidden" name="state" value="{{.State}}">
       <div>
         <label class="field-label" for="label">Label for this client</label>

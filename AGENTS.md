@@ -49,6 +49,7 @@ internal/
   upstream/              MCP client pool + OAuth linking/refresh
   server/                app mux (/mcp, /oauth, /approve, /deny, UI) + ops mux (/metrics, /healthz, /readyz)
   metrics/               prometheus with a closed label vocabulary
+  notices/               THIRD_PARTY_NOTICES.md generator (curated licence registry)
 migrations/              embedded SQL, forward-only
 e2e/                     end-to-end tests (build tag: e2e)
 live/                    live tests against a real upstream (build tag: live; needs LIVE_GARMIN_BIN)

@@ -12,9 +12,15 @@ LABEL org.opencontainers.image.title="mcp-auth-proxy" \
       org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"
 
 COPY --chown=65532:65532 ${TARGETPLATFORM}/mcp-auth-proxy /usr/local/bin/mcp-auth-proxy
-COPY LICENSE /licenses/mcp-auth-proxy/LICENSE
 
-# Numeric nonroot uid/gid so the image works with read-only root filesystems.
+# The MIT license and the upstream licences recorded in the notices both
+# require the notice to travel with the distribution, and an image is a
+# distribution. The files go in a project-named subdirectory so they add to
+# /licenses instead of replacing it.
+COPY LICENSE THIRD_PARTY_NOTICES.md /licenses/mcp-auth-proxy/
+
+# Numeric nonroot uid/gid so the image works with read-only root filesystems and
+# `runAsNonRoot` admission policies that cannot resolve names.
 USER 65532:65532
 
 # All mutable state (SQLite database, signing secret) lives here; mount a volume.

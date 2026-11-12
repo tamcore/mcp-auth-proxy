@@ -31,8 +31,13 @@ archives:
     formats:
       - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Explicit list: without it GoReleaser applies its own default set, which
+    # does not carry the notices. LICENSE and THIRD_PARTY_NOTICES.md are a
+    # distribution condition of the MIT licence and of the licences recorded in
+    # the notices, so every archive must contain them.
     files:
       - LICENSE
+      - THIRD_PARTY_NOTICES.md
       - README.md
       - config.example.yaml
 
@@ -66,10 +71,11 @@ dockers_v2:
     images:
       - "ghcr.io/tamcore/mcp-auth-proxy"
     dockerfile: Dockerfile
-    # The Dockerfile COPYs LICENSE, so it must be in the build context that
-    # GoReleaser assembles; only the binaries are there by default.
+    # The Dockerfile COPYs both files, so they must be in the build context
+    # that GoReleaser assembles; only the binaries are there by default.
     extra_files:
       - LICENSE
+      - THIRD_PARTY_NOTICES.md
     platforms:
       - linux/amd64
       - linux/arm64

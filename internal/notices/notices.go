@@ -211,7 +211,7 @@ func writeModuleTable(out *bytes.Buffer, entries []entry) {
 	}
 
 	fmt.Fprintf(out,
-		"\n%d modules. Every licence was read from the module cache;\nnone was inferred.\n\n",
+		"\n%d modules. Every licence was read from the module cache; none was inferred.\n\n",
 		len(entries))
 }
 

@@ -1,223 +1,52 @@
 # mcp-auth-proxy
 
-A personal [Model Context Protocol](https://modelcontextprotocol.io) auth proxy.
-It fronts several MCP servers ("upstreams") behind **one endpoint**. Each AI
-client (Claude, ChatGPT, Cursor, ...) gets its own key and MCP URL, and **every
-tool call is gated behind a one-time code pushed to your phone via
-[ntfy](https://ntfy.sh)**.
+A personal [Model Context Protocol](https://modelcontextprotocol.io) auth proxy. It fronts several MCP servers ("upstreams") behind **one endpoint**. Each AI client (Claude, ChatGPT, Cursor, ...) gets its own key and MCP URL, and **every proxied tool call is gated behind a one-time code**, pushed to your phone via [ntfy](https://ntfy.sh) and shown in the web portal.
 
-A blocked call never fails silently: it returns an LLM-readable message telling
-the client to ask you for the code, call the `auth` tool with it, and then retry
-the exact same call. A valid session allows unlimited calls for a configurable
-TTL (default 8h, per-key override). The ntfy notification also carries
-**Approve / Deny** buttons (HMAC-signed URLs) as an alternative to typing the
-code.
+- **One endpoint, many upstreams**: Streamable HTTP or stdio MCP servers, exposed to clients as `{upstream}__{tool}`.
+- **Per-client keys**: revoke one client without touching the others; see when each key was last used.
+- **A human in the loop**: a blocked call tells the client to ask you for the code. You type it, or tap **Approve** in the push or the web portal. The session then allows calls for a configurable TTL (default 8h).
+- **Multi-user web portal**: invite links instead of shared passwords, passkeys, per-user push targets, per-user upstream OAuth accounts, and an audit log of proxied tool calls.
 
-## Multi-user
+## Identity is never authorization
 
-The instance is multi-user. Usernames are declared in the config (`users:`);
-admins only via `admins:`. A configured user missing from the database is
-created on start with a **single-use invite link** (`{base_url}/invite/{token}`,
-logged on every start until used) through which they set their own password —
-no passwords are handed over in plaintext. Only the newest link per user is
-valid, invite tokens are stored as hashes only, and links never appear in the
-web UI except once, right after an admin mints one.
+Clients authenticate with a static `mak_…` key or an OAuth `map_…` token, and upstreams can use OAuth too. That only proves *who* is calling: the right to list tools and ask for authorization. **Every proxied tool call still requires the one-time code.** There is no path from "authenticated" to "authorized".
 
-At `{base_url}/login` a user logs in with username+password only and reaches a
-self-contained portal (same-origin CSS and JS only, no external assets; light,
-dark, or auto theme, auto follows the system and is the default) to: create API keys for
-globally configured MCP servers available to them (and change a key's servers
-later; each key shows when it was last seen and last succeeded), run the OAuth flow for
-registered clients, add their **own** MCP servers (stored in the database,
-visible only to them), and view their **audit log** — which client called which
-tool with which parameters (responses optional via `audit.log_responses`,
-entries garbage-collected after `audit.retention`, default 30 days).
+## Quick start
 
-Config upstreams may be global or restricted via `users: [alice]`; a user's own
-upstreams always win over same-named global ones. Admins (`/admin`) can
-temporarily disable users (their keys stop working immediately), see which
-users still have an invite pending, and mint new invite links.
-
-## Security model: identity is never authorization
-
-OAuth 2.x runs on both sides, but it only proves *who* is calling:
-
-- **Client → proxy**: each client uses a static `mak_…` key or an OAuth `map_…`
-  access token. This is its *identity*.
-- **Proxy → upstream**: optionally OAuth. Every user links their **own**
-  upstream account in the portal ("Link my account"); tokens are stored and
-  refreshed per user and never shared. A key only reaches an OAuth upstream
-  with its owner's token. Register `{base_url}/portal/upstream/callback` as
-  redirect URI at the upstream's authorization server. The CLI `upstream link`
-  (loopback redirect) links the slot used by keys without a user.
-
-Logging in via OAuth grants an identity — the right to list tools and ask for
-authorization. **Every tool call still requires the one-time code.** There is no
-path from "authenticated" to "authorized".
-
-Tokens are shown exactly once at creation; only sha256-hex hashes are stored or
-logged.
-
-## Quickstart
+Try it locally with the built-in echo upstream:
 
 ```sh
-go build -o mcp-auth-proxy ./cmd/mcp-auth-proxy
+go install github.com/tamcore/mcp-auth-proxy/cmd/mcp-auth-proxy@latest
 
-# 1. Configure (see config.example.yaml)
-cp config.example.yaml config.yaml
-$EDITOR config.yaml        # set base_url, state_dir, users, upstreams
+curl -fsSL -o config.yaml https://raw.githubusercontent.com/tamcore/mcp-auth-proxy/master/config.example.yaml
+$EDITOR config.yaml        # base_url, users, upstreams
 
-# 2. Run the proxy
-./mcp-auth-proxy serve --config config.yaml
+mcp-auth-proxy serve --config config.yaml
+```
 
-# 3. Create a key for a client (token is printed exactly once)
-./mcp-auth-proxy key create --label "claude-laptop" --config config.yaml
+In a second terminal, create a key for a client. The token is printed exactly once:
+
+```sh
+mcp-auth-proxy key create --label claude-laptop --config config.yaml
 # Token (shown once): mak_…
 # MCP URL:           http://127.0.0.1:8080/mcp/mak_…
-
-# 4. Point the AI client at the MCP URL (or use the Bearer header on /mcp)
 ```
 
-Push notifications are per user. In the portal ("Push notifications") every
-user enters their own ntfy server, topic and optional access token. Saving
-checks that the URL is https (plain http only for loopback), that
-`/v1/health` reports a healthy ntfy server, and sends a test push. Without a
-push target, codes appear only in the portal. Keys created with the CLI have
-no owner; their codes and Approve/Deny URLs are logged. A failed publish is
-logged at WARN.
+Point the AI client at the MCP URL, or at `/mcp` with `Authorization: Bearer mak_…`. Call `echo__echo`: the call is blocked, and because a CLI key without `--user` has no owner, the one-time code appears in the proxy's log. Give the code to the client; it calls the `auth` tool and retries.
 
-Under **Settings** (`/settings`) users change their password (all their other
-browser sessions are logged out), manage **passkeys** (add, see last use,
-delete) and set their push target. The login page offers "Sign in with a
-passkey" (discoverable credentials, no username needed). The passkey relying
-party is derived from `base_url`: its host is the RP ID, so `base_url` must use
-a host name and must not change once passkeys exist.
+For real use, sign in to the web portal with the invite link the proxy logs on start for each configured user, create keys there, and set your ntfy push target under **Settings**.
 
-Open requests are always listed at the top of the portal with their code and
-Approve/Deny buttons; the page reloads itself when requests appear or resolve.
-Approving in the portal is equivalent to the Approve button in the push.
+## Documentation
 
-## The OTP contract (what your AI client sees)
+- [Usage](docs/usage.md): portal, invites, push notifications, passkeys, the OTP contract, upstream OAuth, commands.
+- [Configuration](docs/configuration.md): every config key and its environment override.
+- [Deployment](docs/deployment.md): release verification, container image, Helm chart, routes, logs, upgrades.
+- [Development](docs/development.md): quality gates, browser tests, generated files, releases.
 
-1. The client calls a proxied tool (`{upstream}__{tool}`). `tools/list` is never
-   gated; every `tools/call` is.
-2. Without a live session the call returns an error-shaped result:
+## Security
 
-   > Blocked: tool "echo__echo" on key "claude-laptop" requires a one-time code.
-   > Ask the owner for the 5-digit code from their phone notification or the web portal (expires …).
-   > Then call the `auth` tool with that code (argument `otp`) and retry this
-   > exact tool call.
-
-3. You get an ntfy push with the 5-digit code (3-minute expiry, 3 attempts) and
-   Approve/Deny buttons; the portal shows the same request. A new blocked call
-   within 30s does not push again.
-4. The client calls `auth` with `{"otp": "12345"}`. On success:
-
-   > Session authorized until 2025-01-01T20:00:00Z. Retry the tool call you were
-   > blocked on.
-
-5. The client retries the original call — it now runs.
-
-Instead of the code you can tap **Approve** in the notification; the button URL
-is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret
-lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is
-a 403.
-
-## Commands
-
-```
-mcp-auth-proxy serve                          # run the proxy
-mcp-auth-proxy key create --label L [--upstreams a,b] [--ttl 8h] [--json]
-mcp-auth-proxy key list
-mcp-auth-proxy key revoke <id>                # kills session + pending challenge
-mcp-auth-proxy upstream list|status
-mcp-auth-proxy upstream link <name>           # one-time OAuth linking flow
-mcp-auth-proxy doctor                         # config/state/secret/upstream/user checks
-mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake upstream)
-```
-
-HTTP routes: `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (path auth),
-`/oauth/authorize`, `/oauth/consent`, `/oauth/token`, `/approve/{id}?sig=`,
-`/deny/{id}?sig=`, the web UI. `serve` logs JSON to stdout: one `http request`
-line per request (credential path segments redacted, no query string) and one
-`tool call` line per audit entry. The ops listener (`ops_listen_addr`) serves
-`/metrics`, `/healthz` and `/readyz` (database reachable) only; never expose it.
-
-## Configuration reference
-
-See [config.example.yaml](config.example.yaml). Every key has an environment
-override prefixed `MCP_PROXY_` (e.g. `MCP_PROXY_SESSION_TTL=4h`,
-`MCP_PROXY_OTP_DIGITS=6`).
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `base_url` | `http://127.0.0.1:8080` | canonical public URL (button URLs, MCP URL) |
-| `listen_addr` | `127.0.0.1:8080` | HTTP listen address |
-| `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
-| `state_dir` | `./data` | holds `proxy.db` and `sign.secret` |
-| `session_ttl` | `8h` | session lifetime after auth |
-| `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
-| `upstreams[]` | – | `name` + exactly one of `url` / `command`, optional `headers`, `oauth` |
-| `oauth.token_ttl` | `24h` | `map_` access token lifetime (no refresh tokens in v1) |
-| `oauth.authorize_code_ttl` | `10m` | single-use authorization code lifetime |
-| `oauth.clients[]` | – | registered AS clients (`client_id`, `redirect_uris`, …) |
-
-## Kubernetes
-
-A Helm chart is in [charts/mcp-auth-proxy](charts/mcp-auth-proxy): a
-single-replica `Recreate` deployment (one SQLite database, one signing secret)
-with a PVC for `/data` and the config in a ConfigMap. Released charts are
-published to `oci://ghcr.io/tamcore/charts`.
-
-```sh
-helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
-  --set config.baseURL=https://mcp.example.com \
-  --set 'config.users[0]=alice' --set 'config.admins[0]=alice'
-```
-
-Passkeys need https. With `httpRoute.httpsRedirect.enabled` the chart adds a
-permanent http → https redirect on the gateway's http listener, and the proxy
-sends HSTS whenever `base_url` is https. Pin `httpRoute.parentRefs[].sectionName`
-to the https listener; otherwise the app route also serves plain http.
-
-The image trusts only public CAs. If a user's ntfy server or an upstream uses a private CA,
-pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the
-system roots via `SSL_CERT_DIR`).
-
-## Development
-
-Quality gates (CI runs these plus `-race`, the live suite against a real
-garmin-mcp over stdio, and `helm lint`/`helm template` on the chart):
-
-```sh
-gofmt -l .                                   # empty
-go build ./...
-go vet ./...  &&  go vet -tags e2e ./e2e/  &&  go vet -tags live ./live/
-go test -count=1 ./...
-go test -tags e2e -count=1 -timeout 300s ./e2e/   # includes playwright-go browser tests
-LIVE_GARMIN_BIN=/path/to/garmin-mcp go test -tags live -count=1 -timeout 300s ./live/
-go mod tidy
-golangci-lint run
-golangci-lint run --build-tags e2e ./e2e/
-golangci-lint run --build-tags live ./live/
-helm lint ./charts/mcp-auth-proxy --set config.baseURL=https://mcp.example --set 'config.users[0]=alice'
-```
-
-The e2e suite drives the web UI in headless Chromium via playwright-go. The
-first run downloads the driver and Chromium; on Linux, install system
-libraries once with
-`go run github.com/mxschmitt/playwright-go/cmd/playwright install --with-deps --only-shell chromium`.
-
-The stylesheet `internal/ui/assets/app.css` is generated by the Tailwind CSS
-v4 standalone CLI and committed, so `go build` needs no Node toolchain. After
-changing templates or `internal/ui/src/input.css`, put `tailwindcss` on `PATH`
-and run `go generate ./internal/ui`; CI fails if the committed file is stale.
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md). It also lists what the proxy stores and a deployment checklist.
 
 ## License
 
-MIT, copyright Philipp Born. See [LICENSE](LICENSE). Third-party licences of
-everything linked into the binary are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); regenerate it with
-`go run ./cmd/notices` after a dependency change.
-
-Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+MIT, copyright Philipp Born. See [LICENSE](LICENSE). Third-party licences of everything linked into the binary are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

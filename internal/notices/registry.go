@@ -13,14 +13,12 @@ var preamble string
 // moduleSetIntro states the selection rule for the module table. It is prose
 // about how the set is derived, so it is fixed text; only the table and the
 // count below it are computed.
-const moduleSetIntro = "The set below is every module that reaches a released binary. It was\n" +
-	"derived with `go list -deps ./cmd/mcp-auth-proxy` under `CGO_ENABLED=0` for\n" +
-	"each released target — `linux` and `darwin` crossed with\n" +
-	"`amd64` and `arm64`, matching the `builds` matrix in `.goreleaser.yaml` —\n" +
-	"and unioned, so a module that only a single platform links is still\n" +
-	"covered. It is the linked set, not the `go.mod` requirement set:\n" +
-	"build-only and test-only requirements are excluded because they reach no\n" +
-	"artifact.\n"
+const moduleSetIntro = "The set below is every module that reaches a released binary. It was derived with `go list " +
+	"-deps ./cmd/mcp-auth-proxy` under `CGO_ENABLED=0` for each released target — `linux` and " +
+	"`darwin` crossed with `amd64` and `arm64`, matching the `builds` matrix in " +
+	"`.goreleaser.yaml` — and unioned, so a module that only a single platform links is still " +
+	"covered. It is the linked set, not the `go.mod` requirement set: build-only and test-only " +
+	"requirements are excluded because they reach no artifact.\n"
 
 // SPDX identifiers used by the registry. They are named so the table below
 // states a licence once and cannot drift into a typo that no reader would catch.

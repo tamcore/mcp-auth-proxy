@@ -83,7 +83,7 @@ func consentAndGetCode(t *testing.T, s *Server, verifier string) string {
 		t.Fatalf("authorize: %d %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "never authorizes tool calls") &&
-		!strings.Contains(rec.Body.String(), "Every tool call still requires") {
+		!strings.Contains(rec.Body.String(), "Every proxied tool call still requires") {
 		t.Fatalf("consent page not honest: %s", rec.Body.String())
 	}
 	form := url.Values{}

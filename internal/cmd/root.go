@@ -17,7 +17,7 @@ func Execute() {
 		Use:   "mcp-auth-proxy",
 		Short: "Personal MCP auth proxy: one endpoint, per-client keys, one-time-code gates",
 		Long: "mcp-auth-proxy fronts several MCP servers behind one endpoint. Every AI client gets its own " +
-			"key and MCP URL, and every tool call is gated behind a one-time code pushed to the owner's phone.",
+			"key and MCP URL, and every proxied tool call is gated behind a one-time code pushed to the owner's phone.",
 	}
 	root.SilenceUsage = true // runtime errors are not usage errors
 	root.PersistentFlags().String("config", "", "path to YAML config file (env MCP_PROXY_CONFIG)")

@@ -52,6 +52,7 @@ internal/
   notices/               THIRD_PARTY_NOTICES.md generator (curated licence registry)
   version/               build version/commit injected via ldflags
 migrations/              embedded SQL, forward-only
+docs/                    usage, configuration, deployment, development
 e2e/                     end-to-end tests (build tag: e2e)
 live/                    live tests against a real upstream (build tag: live; needs LIVE_GARMIN_BIN)
 charts/mcp-auth-proxy/   Helm chart (single-replica stateful deployment)

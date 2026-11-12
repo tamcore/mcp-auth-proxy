@@ -196,7 +196,7 @@ func TestUINonAdminAndConsent(t *testing.T) {
 		"&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=s")
 	heading := page.GetByRole("heading", playwright.PageGetByRoleOptions{Name: "Authorize identity"})
 	must(t, expect.Locator(heading).ToBeVisible())
-	must(t, expect.Locator(page.GetByRole("note")).ToContainText("Every tool call still requires a one-time code"))
+	must(t, expect.Locator(page.GetByRole("note")).ToContainText("Every proxied tool call still requires a one-time code"))
 }
 
 func TestUIThemeAutoLightDark(t *testing.T) {

@@ -21,6 +21,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/metrics"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	"github.com/tamcore/mcp-auth-proxy/internal/upstream"
+	"github.com/tamcore/mcp-auth-proxy/internal/version"
 )
 
 // NamespaceSep separates upstream and tool names in proxied tool names.
@@ -96,7 +97,7 @@ func (p *Proxy) ServerFor(ctx context.Context, key *store.Key) (*mcp.Server, err
 // build assembles the key's server. A failing upstream only drops its own
 // tools; the result is then incomplete and not cached, so it is retried.
 func (p *Proxy) build(ctx context.Context, key *store.Key) (*mcp.Server, bool) {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
+	srv := mcp.NewServer(version.Implementation(), nil)
 	p.addAuthTool(srv, key)
 	complete := true
 	for _, name := range key.Upstreams {

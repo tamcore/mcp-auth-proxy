@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/version"
 )
 
 func testConfigFile(t *testing.T) string {
@@ -66,9 +68,9 @@ func TestKeyCreateListRevoke(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	old := Build
-	Build = BuildInfo{Version: "v1.2.3", Commit: "abc123"}
-	t.Cleanup(func() { Build = old })
+	oldV, oldC := version.Version, version.Commit
+	version.Version, version.Commit = "v1.2.3", "abc123"
+	t.Cleanup(func() { version.Version, version.Commit = oldV, oldC })
 	c := newVersionCmd()
 	buf := &bytes.Buffer{}
 	c.SetOut(buf)

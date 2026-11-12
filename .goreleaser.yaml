@@ -21,7 +21,9 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}}
+      - -s -w
+      - -X github.com/tamcore/mcp-auth-proxy/internal/version.Version={{.Version}}
+      - -X github.com/tamcore/mcp-auth-proxy/internal/version.Commit={{.ShortCommit}}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:

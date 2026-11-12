@@ -22,6 +22,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/oauthserver"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	"github.com/tamcore/mcp-auth-proxy/internal/ui"
+	"github.com/tamcore/mcp-auth-proxy/internal/version"
 	"github.com/tamcore/mcp-auth-proxy/internal/webui"
 )
 
@@ -167,12 +168,12 @@ func pathToken(r *http.Request) string {
 func (s *Server) mcpGetServer(r *http.Request) *mcp.Server {
 	key, _ := r.Context().Value(ctxKey{}).(*store.Key)
 	if key == nil {
-		return mcp.NewServer(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
+		return mcp.NewServer(version.Implementation(), nil)
 	}
 	srv, err := s.proxy.ServerFor(r.Context(), key)
 	if err != nil {
 		s.logger.Error("build per-key MCP server", "key", key.ID, "error", err)
-		return mcp.NewServer(&mcp.Implementation{Name: "mcp-auth-proxy", Version: "dev"}, nil)
+		return mcp.NewServer(version.Implementation(), nil)
 	}
 	return srv
 }

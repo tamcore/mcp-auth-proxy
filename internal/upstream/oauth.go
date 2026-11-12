@@ -35,9 +35,12 @@ type authRoundTripper struct {
 
 // RoundTrip implements http.RoundTripper.
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	token, err := rt.currentToken(req.Context())
-	if err != nil && !errors.Is(err, ErrNoToken) {
-		return nil, err
+	var token string
+	if rt.up.OAuth() {
+		var err error
+		if token, err = rt.currentToken(req.Context()); err != nil && !errors.Is(err, ErrNoToken) {
+			return nil, err
+		}
 	}
 	clone := req.Clone(req.Context())
 	for k, vs := range rt.header {
@@ -52,7 +55,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	if err != nil {
 		return resp, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode == http.StatusUnauthorized && rt.up.OAuth() {
 		_ = resp.Body.Close()
 		if err := rt.refresh(req.Context()); err != nil {
 			return nil, err

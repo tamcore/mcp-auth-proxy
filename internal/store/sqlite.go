@@ -29,6 +29,8 @@ import (
 var (
 	ErrNotFound = errors.New("store: not found")
 	ErrTooNew   = errors.New("store: database schema is newer than this build")
+	// ErrLastAdmin: disabling the user would leave no enabled admin.
+	ErrLastAdmin = errors.New("store: the last enabled admin cannot be disabled")
 	// ErrNotPending: the challenge was resolved or used up by another request.
 	ErrNotPending = errors.New("store: challenge is not pending")
 )

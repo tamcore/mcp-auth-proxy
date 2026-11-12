@@ -446,3 +446,23 @@ func TestDeleteRevokedKeyKeepsAudit(t *testing.T) {
 		t.Fatalf("audit history must survive key deletion: %+v %v", entries, err)
 	}
 }
+
+func TestTheLastEnabledAdminCannotBeDisabled(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	for _, id := range []string{"u_a1", "u_a2"} {
+		if err := st.CreateUser(ctx, &User{ID: id, Username: id, Admin: true, CreatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.SetUserDisabled(ctx, "u_a1", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserDisabled(ctx, "u_a2", true); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("disabling the last enabled admin: want ErrLastAdmin, got %v", err)
+	}
+	if err := st.SetUserDisabled(ctx, "u_nobody", true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown user: want ErrNotFound, got %v", err)
+	}
+}

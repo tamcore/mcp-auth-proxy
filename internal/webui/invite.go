@@ -27,7 +27,7 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 	}
 	pw := r.PostForm.Get("password")
 	pw2 := r.PostForm.Get("password2")
-	if len(pw) < 8 {
+	if len(pw) < minPasswordLen {
 		ui.renderInvite(w, http.StatusBadRequest, token, "Password must be at least 8 characters.")
 		return
 	}
@@ -35,9 +35,8 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 		ui.renderInvite(w, http.StatusBadRequest, token, "Passwords do not match.")
 		return
 	}
-	user, err := ui.store.ConsumeInvite(r.Context(), token, time.Now().UTC())
-	if err != nil {
-		http.Error(w, "invite link is invalid, expired, or already used", http.StatusNotFound)
+	if len(pw) > maxPasswordBytes {
+		ui.renderInvite(w, http.StatusBadRequest, token, "Password must have at most 72 bytes.")
 		return
 	}
 	hash, err := store.HashPassword(pw)
@@ -45,8 +44,9 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not set password", http.StatusInternalServerError)
 		return
 	}
-	if err := ui.store.SetUserPassword(r.Context(), user.ID, hash); err != nil {
-		http.Error(w, "could not set password", http.StatusInternalServerError)
+	user, err := ui.store.ConsumeInvite(r.Context(), token, hash, time.Now().UTC())
+	if err != nil {
+		http.Error(w, "invite link is invalid, expired, or already used", http.StatusNotFound)
 		return
 	}
 	ui.sessions.Set(w, ui.sessions.IssueFor(user))

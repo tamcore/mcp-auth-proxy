@@ -26,7 +26,7 @@ Push notifications are per user. Under **Settings** every user enters their own 
 
 ## Settings and passkeys
 
-Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed). Logging out ends every web session of the user, on all devices. Five failed password logins in a row lock that username for a minute. The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
+Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed; the authenticator must verify the user with a PIN or biometric). Logging out ends every web session of the user, on all devices. Five failed password logins in a row lock that username for a minute. The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
 
 ## The OTP contract (what your AI client sees)
 

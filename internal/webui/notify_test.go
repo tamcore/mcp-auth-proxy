@@ -30,7 +30,9 @@ func postForm(t *testing.T, ts *httptest.Server, cookie *http.Cookie, path strin
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(cookie)
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
 	resp, err := noRedirectClient().Do(req)
 	if err != nil {
 		t.Fatal(err)

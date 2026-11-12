@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -31,13 +32,22 @@ func (ui *WebUI) handleAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *WebUI) handleAdminDisable(w http.ResponseWriter, r *http.Request) {
-	if _, ok := ui.requireAdmin(w, r); !ok {
+	admin, ok := ui.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	_ = r.ParseForm()
 	id := r.PostForm.Get("id")
 	disabled := r.PostForm.Get("disabled") == "1"
+	if disabled && id == admin.ID {
+		http.Error(w, "you cannot disable yourself", http.StatusBadRequest)
+		return
+	}
 	if err := ui.store.SetUserDisabled(r.Context(), id, disabled); err != nil {
+		if errors.Is(err, store.ErrLastAdmin) {
+			http.Error(w, "the last enabled admin cannot be disabled", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "could not update user", http.StatusInternalServerError)
 		return
 	}

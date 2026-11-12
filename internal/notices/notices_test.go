@@ -262,8 +262,6 @@ func goEnv(key string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// moduleDirWithLicence builds a throwaway module directory holding the named
-// licence files, so the registry checks can be exercised without the cache.
 // realModuleDir is the module cache directory of path, whose licence matches
 // the pinned digest.
 func realModuleDir(t *testing.T, path string) string {
@@ -301,6 +299,8 @@ func TestVerifyLicenceFilesRejectsAnEntryWithoutFiles(t *testing.T) {
 	}
 }
 
+// moduleDirWithLicence builds a throwaway module directory holding the named
+// licence files, so the registry checks can be exercised without the cache.
 func moduleDirWithLicence(t *testing.T, names ...string) string {
 	t.Helper()
 

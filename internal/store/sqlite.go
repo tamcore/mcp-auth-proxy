@@ -168,16 +168,16 @@ func (s *Store) Migrate(ctx context.Context, fsys fs.FS) error {
 	if _, err := s.db.ExecContext(ctx, createMigrationsTable); err != nil {
 		return fmt.Errorf("store: create schema_migrations: %w", err)
 	}
-	applied, err := s.appliedVersions(ctx)
+	applied, err := s.appliedMigrations(ctx)
 	if err != nil {
 		return err
 	}
-	latest := 0
-	for _, a := range applied {
-		latest = max(latest, a)
-	}
-	if latest > len(ms) {
+	latest := len(applied)
+	if latest > 0 && applied[latest-1].Version > len(ms) {
 		return ErrTooNew
+	}
+	if err := matchApplied(applied, ms); err != nil {
+		return err
 	}
 	s.migrated = nil
 	for _, m := range ms {
@@ -205,12 +205,13 @@ func (s *Store) backup(ctx context.Context, version int) error {
 	}
 	dst := fmt.Sprintf("%s.pre-v%04d.bak", s.path, version)
 	s.snapshot = dst
-	if _, err := os.Stat(dst); err == nil { // an earlier, failed attempt already took it
+	if snapshotAt(ctx, dst, version-1) { // an earlier, failed attempt already took it
 		if err := os.Chmod(dst, 0o600); err != nil {
 			return fmt.Errorf("store: restrict backup %04d: %w", version, err)
 		}
 		return nil
 	}
+	_ = os.Remove(dst) // empty, corrupt or from another schema version
 	// VACUUM INTO keeps the mode of an existing empty file, so the copy is never readable by others.
 	tmp := dst + ".tmp"
 	_ = os.Remove(tmp)
@@ -227,19 +228,47 @@ func (s *Store) backup(ctx context.Context, version int) error {
 	return nil
 }
 
-func (s *Store) appliedVersions(ctx context.Context) ([]int, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT version FROM schema_migrations ORDER BY version`)
+// snapshotAt reports whether path is a readable database at schema version v.
+func snapshotAt(ctx context.Context, path string, v int) bool {
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return false
+	}
+	defer func() { _ = db.Close() }()
+	var got int
+	err = db.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_migrations`).Scan(&got)
+	return err == nil && got == v
+}
+
+// matchApplied refuses a database whose recorded migrations are not exactly
+// the build's first ones: a gap, a rename or an edited file means the schema
+// may differ from what the code expects.
+func matchApplied(applied, ms []Migration) error {
+	for i, a := range applied {
+		if i >= len(ms) || a.Version != ms[i].Version || a.Name != ms[i].Name || a.Checksum != ms[i].Checksum {
+			return fmt.Errorf("store: applied migration %04d_%s does not match this build's migrations; refusing to start",
+				a.Version, a.Name)
+		}
+	}
+	return nil
+}
+
+func (s *Store) appliedMigrations(ctx context.Context) ([]Migration, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT version, name, checksum FROM schema_migrations ORDER BY version`)
 	if err != nil {
 		return nil, fmt.Errorf("store: read schema_migrations: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []int
+	var out []Migration
 	for rows.Next() {
-		var v int
-		if err := rows.Scan(&v); err != nil {
+		var m Migration
+		if err := rows.Scan(&m.Version, &m.Name, &m.Checksum); err != nil {
 			return nil, err
 		}
-		out = append(out, v)
+		out = append(out, m)
 	}
 	return out, rows.Err()
 }

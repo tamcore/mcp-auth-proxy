@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -200,8 +201,8 @@ func unmarshalSlice[T any](v *viper.Viper, key string, out *[]T) error {
 // Validate enforces the invariants the rest of the code relies on.
 func (c *Config) Validate() error {
 	var errs []error
-	if strings.TrimSpace(c.BaseURL) == "" {
-		errs = append(errs, errors.New("config: base_url must not be empty"))
+	if err := validateBaseURL(c.BaseURL); err != nil {
+		errs = append(errs, err)
 	}
 	if strings.TrimSpace(c.ListenAddr) == "" {
 		errs = append(errs, errors.New("config: listen_addr must not be empty"))
@@ -227,8 +228,13 @@ func (c *Config) Validate() error {
 	if c.Audit.Retention <= 0 {
 		errs = append(errs, errors.New("config: audit.retention must be positive"))
 	}
+	clientIDs := map[string]bool{}
 	for i := range c.OAuth.Clients {
 		errs = append(errs, c.OAuth.Clients[i].validate(i))
+		if id := c.OAuth.Clients[i].ClientID; clientIDs[id] {
+			errs = append(errs, fmt.Errorf("config: duplicate oauth client_id %q", id))
+		}
+		clientIDs[c.OAuth.Clients[i].ClientID] = true
 	}
 	if c.OAuth.TokenTTL <= 0 {
 		errs = append(errs, errors.New("config: oauth.token_ttl must be positive"))
@@ -239,12 +245,29 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
+// validateBaseURL requires an absolute http(s) origin: it builds every
+// public link and is the passkey relying party.
+func validateBaseURL(raw string) error {
+	u, err := url.Parse(raw)
+	switch {
+	case strings.TrimSpace(raw) == "":
+		return errors.New("config: base_url must not be empty")
+	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
+		return fmt.Errorf("config: base_url %q must be an absolute http or https URL", raw)
+	case u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "":
+		return fmt.Errorf("config: base_url %q must be a bare origin (no credentials, path, query or fragment)", raw)
+	}
+	return nil
+}
+
 // validateUsers checks the users/admins lists and returns the user set.
 func validateUsers(users, admins []string) (map[string]bool, []error) {
 	userSet := map[string]bool{}
 	var errs []error
 	for i, u := range users {
-		u = strings.TrimSpace(u)
+		if u != strings.TrimSpace(u) {
+			errs = append(errs, fmt.Errorf("config: users[%d] %q has surrounding spaces", i, u))
+		}
 		if u == "" {
 			errs = append(errs, fmt.Errorf("config: users[%d] must not be empty", i))
 			continue
@@ -255,7 +278,6 @@ func validateUsers(users, admins []string) (map[string]bool, []error) {
 		userSet[u] = true
 	}
 	for i, a := range admins {
-		a = strings.TrimSpace(a)
 		if !userSet[a] {
 			errs = append(errs, fmt.Errorf("config: admins[%d] %q is not in users", i, a))
 		}

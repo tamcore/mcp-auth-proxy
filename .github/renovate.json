@@ -24,9 +24,27 @@
         "golang.org/x/crypto",
         "golang.org/x/oauth2",
         "golang.org/x/sys",
-        "modernc.org/libc"
+        "modernc.org/libc",
+        "github.com/go-webauthn/webauthn",
+        "github.com/go-webauthn/x",
+        "github.com/golang-jwt/jwt/v5"
       ],
       "automerge": false
+    },
+    {
+      "description": "THIRD_PARTY_NOTICES.md ships with every release and must describe the linked module set exactly. Regenerate it on every Go module update; its freshness test fails otherwise.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "postUpgradeTasks": {
+        "commands": [
+          "go run ./cmd/notices"
+        ],
+        "fileFilters": [
+          "THIRD_PARTY_NOTICES.md"
+        ],
+        "executionMode": "branch"
+      }
     },
     {
       "description": "The runtime base image is pinned by digest, so Renovate is the only thing that keeps it current.",

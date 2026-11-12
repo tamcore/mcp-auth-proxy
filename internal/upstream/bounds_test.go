@@ -24,7 +24,7 @@ const (
 
 func TestOversizedUpstreamResponseIsCut(t *testing.T) {
 	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "Application/JSON; charset=utf-8")
 		chunk := []byte(strings.Repeat("x", 1<<20))
 		for range maxResponseBytes>>20 + 1 {
 			if _, err := w.Write(chunk); err != nil {

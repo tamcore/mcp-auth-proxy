@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -84,11 +85,17 @@ func (rt *authRoundTripper) send(req *http.Request, token string) (*http.Respons
 		clone.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := rt.base.RoundTrip(clone)
-	if err == nil && strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+	if err == nil && !isEventStream(resp.Header.Get("Content-Type")) {
 		// One JSON-RPC answer; SSE streams (GET, or a streamed POST answer) stay uncapped.
 		resp.Body = http.MaxBytesReader(nil, resp.Body, maxResponseBytes)
 	}
 	return resp, err
+}
+
+// isEventStream reports an SSE answer; media types compare case-insensitively.
+func isEventStream(contentType string) bool {
+	mt, _, err := mime.ParseMediaType(contentType)
+	return err == nil && mt == "text/event-stream"
 }
 
 func (rt *authRoundTripper) currentToken(ctx context.Context) (string, error) {

@@ -100,6 +100,13 @@ listen_addr: 127.0.0.1:8080
 ops_listen_addr: 127.0.0.1:8080
 upstreams: [{name: e, command: [x]}]
 `,
+		"confidential oauth client": `
+base_url: http://x
+state_dir: ./data
+upstreams: [{name: e, command: [x]}]
+oauth:
+  clients: [{client_id: c, name: C, redirect_uris: [https://c/cb], confidential: true}]
+`,
 		"bad otp digits": `
 base_url: http://x
 state_dir: ./data

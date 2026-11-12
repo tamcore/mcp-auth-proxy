@@ -107,13 +107,11 @@ func (s *Server) validateAuthorize(ctx context.Context, q url.Values) (*authoriz
 	if clientID == "" {
 		return nil, errors.New("client_id is required")
 	}
+	// One message for both, so the answer does not reveal which client_ids exist.
 	client, err := s.store.OAuthClientByID(ctx, clientID)
-	if err != nil {
-		return nil, errors.New("unknown client_id")
-	}
 	redirectURI := q.Get("redirect_uri")
-	if !exactMatch(client.RedirectURIs, redirectURI) {
-		return nil, errors.New("redirect_uri does not exactly match a registered URI")
+	if err != nil || !exactMatch(client.RedirectURIs, redirectURI) {
+		return nil, errors.New("unknown client_id or redirect_uri")
 	}
 	if q.Get("code_challenge_method") != "S256" {
 		return nil, errors.New("code_challenge_method must be S256")

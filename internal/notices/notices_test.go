@@ -129,7 +129,7 @@ func TestDescribeRejectsAnUnregisteredModule(t *testing.T) {
 // distribute something they do not, so the registry is wrong and must be pruned
 // rather than silently ignored.
 func TestDescribeRejectsAStaleRegistryEntry(t *testing.T) {
-	dir := moduleDirWithLicence(t, fileLicense)
+	dir := realModuleDir(t, pflagModule)
 
 	// One real module, so every other registry entry is left unmatched.
 	_, err := describe([]module{{Path: pflagModule, Version: "v1.0.10", Dir: dir}})
@@ -264,6 +264,43 @@ func goEnv(key string) string {
 
 // moduleDirWithLicence builds a throwaway module directory holding the named
 // licence files, so the registry checks can be exercised without the cache.
+// realModuleDir is the module cache directory of path, whose licence matches
+// the pinned digest.
+func realModuleDir(t *testing.T, path string) string {
+	t.Helper()
+	requireResolvableModuleGraph(t)
+
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", path)
+	cmd.Dir = repoRoot
+
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list -m %s: %v", path, err)
+	}
+
+	return strings.TrimSpace(string(out))
+}
+
+// TestVerifyLicenceFilesRejectsAChangedLicenceText catches a bump that keeps the
+// file name but changes the terms: the SPDX entry would silently go stale.
+func TestVerifyLicenceFilesRejectsAChangedLicenceText(t *testing.T) {
+	dir := moduleDirWithLicence(t, fileLicense)
+
+	err := verifyLicenceFiles(module{Path: pflagModule, Dir: dir}, moduleNotices[pflagModule])
+	if err == nil || !strings.Contains(err.Error(), "licence text of "+pflagModule+" changed") {
+		t.Fatalf("a changed licence text must fail, got %v", err)
+	}
+}
+
+func TestVerifyLicenceFilesRejectsAnEntryWithoutFiles(t *testing.T) {
+	dir := moduleDirWithLicence(t, fileLicense)
+
+	err := verifyLicenceFiles(module{Path: pflagModule, Dir: dir}, moduleNotice{SPDX: spdxBSD3})
+	if err == nil || !strings.Contains(err.Error(), "names no licence file") {
+		t.Fatalf("an entry without files must fail, got %v", err)
+	}
+}
+
 func moduleDirWithLicence(t *testing.T, names ...string) string {
 	t.Helper()
 

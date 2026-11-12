@@ -7,7 +7,8 @@ import (
 )
 
 func FuzzBaseURL(f *testing.F) {
-	for _, s := range []string{"https://ntfy.sh", "http://127.0.0.1:1", "http://ntfy.example", "https://u:p@x", "ntfy.sh"} {
+	seeds := []string{"https://ntfy.sh", "http://127.0.0.1:1", "http://ntfy.example", "https://u:p@x", "ntfy.sh"}
+	for _, s := range seeds {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, raw string) {

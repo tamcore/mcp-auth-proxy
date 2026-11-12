@@ -245,14 +245,18 @@ func (c *Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// normalizeBaseURL lowercases scheme and host, so checks such as
-// HasPrefix(base_url, "https://") hold for "HTTPS://Proxy.Example" too.
+// normalizeBaseURL lowercases scheme and host and drops a trailing slash, so
+// HasPrefix(base_url, "https://") holds for "HTTPS://Proxy.Example" and
+// base_url+"/approve/..." never becomes "//approve/...".
 func normalizeBaseURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
 		return raw
 	}
 	u.Host = strings.ToLower(u.Host)
+	if u.Path == "/" {
+		u.Path = ""
+	}
 	return u.String()
 }
 
@@ -289,6 +293,10 @@ func validateUsers(users, admins []string) (map[string]bool, []error) {
 		userSet[u] = true
 	}
 	for i, a := range admins {
+		if a != strings.TrimSpace(a) {
+			errs = append(errs, fmt.Errorf("config: admins[%d] %q has surrounding spaces", i, a))
+			continue
+		}
 		if !userSet[a] {
 			errs = append(errs, fmt.Errorf("config: admins[%d] %q is not in users", i, a))
 		}

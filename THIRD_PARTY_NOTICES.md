@@ -1,34 +1,16 @@
 # Third-party notices
 
-`mcp-auth-proxy` is licensed under the MIT License. See [`LICENSE`](LICENSE)
-for the project's own terms. This file records the third-party material
-that links into a released binary, and reproduces every applicable
-licence in full. There is no separate `NOTICE` file: this is the single
-notices document, and it ships with the release archives and inside the
-container image under `/licenses/mcp-auth-proxy/`.
+`mcp-auth-proxy` is licensed under the MIT License. See [`LICENSE`](LICENSE) for the project's own terms. This file records the third-party material that links into a released binary, and reproduces every applicable licence in full. There is no separate `NOTICE` file: this is the single notices document, and it ships with the release archives and inside the container image under `/licenses/mcp-auth-proxy/`.
 
-Licence texts for Go modules are copied from the module cache
-(`go env GOMODCACHE`) at the exact versions listed, so each text is the
-one that belongs to the pinned version.
+Licence texts for Go modules are copied from the module cache (`go env GOMODCACHE`) at the exact versions listed, so each text is the one that belongs to the pinned version.
 
-Nothing here is a summary. Where a text is reproduced it is byte-for-byte,
-with one exception that carries no terms: a run of blank lines at the very
-end of a file is collapsed to a single newline so the closing code fence
-sits on its own line.
+Nothing here is a summary. Where a text is reproduced it is byte-for-byte, with one exception that carries no terms: a run of blank lines at the very end of a file is collapsed to a single newline so the closing code fence sits on its own line.
 
-Regenerate this file with `go run ./cmd/notices` after any dependency
-change; a test fails while it is stale.
+Regenerate this file with `go run ./cmd/notices` after any dependency change; a test fails while it is stale.
 
 ## Go modules in the released binary
 
-The set below is every module that reaches a released binary. It was
-derived with `go list -deps ./cmd/mcp-auth-proxy` under `CGO_ENABLED=0` for
-each released target — `linux` and `darwin` crossed with
-`amd64` and `arm64`, matching the `builds` matrix in `.goreleaser.yaml` —
-and unioned, so a module that only a single platform links is still
-covered. It is the linked set, not the `go.mod` requirement set:
-build-only and test-only requirements are excluded because they reach no
-artifact.
+The set below is every module that reaches a released binary. It was derived with `go list -deps ./cmd/mcp-auth-proxy` under `CGO_ENABLED=0` for each released target — `linux` and `darwin` crossed with `amd64` and `arm64`, matching the `builds` matrix in `.goreleaser.yaml` — and unioned, so a module that only a single platform links is still covered. It is the linked set, not the `go.mod` requirement set: build-only and test-only requirements are excluded because they reach no artifact.
 
 | Module | Version | SPDX |
 |--------|---------|------|
@@ -81,8 +63,7 @@ artifact.
 | `modernc.org/memory` | `v1.12.1` | `BSD-3-Clause` |
 | `modernc.org/sqlite` | `v1.62.0` | `BSD-3-Clause` |
 
-48 modules. Every licence was read from the module cache;
-none was inferred.
+48 modules. Every licence was read from the module cache; none was inferred.
 
 ## Full licence texts
 

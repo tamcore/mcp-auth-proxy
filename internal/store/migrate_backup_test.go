@@ -40,13 +40,23 @@ func TestMigrateBacksUpAndReportsPendingMigrations(t *testing.T) {
 	if s.MigrationBackup() != path+".pre-v0002.bak" {
 		t.Fatalf("backup path: %q", s.MigrationBackup())
 	}
+	info, err := os.Stat(s.MigrationBackup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("backup mode %o, want 600 (it holds tokens)", mode)
+	}
 	v3 := fstest.MapFS{mig1: v1[mig1], "0002_b.sql": v2["0002_b.sql"],
 		"0003_c.sql": {Data: []byte("CREATE TABLE c (z TEXT) STRICT;")}}
-	if err := os.WriteFile(path+".pre-v0003.bak", []byte("old snapshot"), 0o600); err != nil {
+	if err := os.WriteFile(path+".pre-v0003.bak", []byte("old snapshot"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Migrate(ctx, v3); err != nil {
 		t.Fatalf("an existing snapshot from a failed attempt must not block startup: %v", err)
+	}
+	if info, err = os.Stat(path + ".pre-v0003.bak"); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("an existing snapshot must be tightened to 600: %v", err)
 	}
 	bak, err := sql.Open("sqlite", "file:"+path+".pre-v0002.bak?mode=ro")
 	if err != nil {

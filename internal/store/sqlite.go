@@ -203,11 +203,13 @@ func (s *Store) backup(ctx context.Context, version int) error {
 	}
 	dst := fmt.Sprintf("%s.pre-v%04d.bak", s.path, version)
 	s.snapshot = dst
-	if _, err := os.Stat(dst); err == nil {
-		return nil // an earlier, failed attempt already took the snapshot
+	if _, err := os.Stat(dst); err != nil { // else an earlier, failed attempt already took it
+		if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
+			return fmt.Errorf("store: backup before migration %04d: %w", version, err)
+		}
 	}
-	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
-		return fmt.Errorf("store: backup before migration %04d: %w", version, err)
+	if err := os.Chmod(dst, 0o600); err != nil {
+		return fmt.Errorf("store: restrict backup %04d: %w", version, err)
 	}
 	return nil
 }

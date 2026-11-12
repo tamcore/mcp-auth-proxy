@@ -3,6 +3,7 @@ package webui
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
@@ -21,6 +22,7 @@ type WebUI struct {
 	links      *pendingLinks
 	webauthn   *webauthn.WebAuthn
 	ceremonies *ceremonies
+	logins     *loginLimiter
 	logger     *slog.Logger
 }
 
@@ -34,12 +36,16 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 	if err != nil {
 		logger.Warn("passkeys disabled", "error", err)
 	}
+	secure := strings.HasPrefix(cfg.BaseURL, "https://")
+	sessions := NewSessions(signSecret, nil)
+	sessions.secure = secure
 	return &WebUI{
 		webauthn:   wa,
-		ceremonies: &ceremonies{m: map[string]ceremony{}},
+		ceremonies: &ceremonies{m: map[string]ceremony{}, secure: secure},
+		logins:     newLoginLimiter(nil),
 		store:      st,
 		cfg:        cfg,
-		sessions:   NewSessions(signSecret, nil),
+		sessions:   sessions,
 		pages:      pages,
 		approvals:  approvals,
 		links:      &pendingLinks{m: map[string]pendingLink{}},

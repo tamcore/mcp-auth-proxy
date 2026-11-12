@@ -27,6 +27,7 @@ const sessionTTL = 24 * time.Hour
 type Sessions struct {
 	secret []byte
 	now    func() time.Time
+	secure bool
 }
 
 // NewSessions builds the cookie signer.
@@ -113,20 +114,22 @@ func (s *Sessions) User(r *http.Request, st *store.Store) (*store.User, bool) {
 }
 
 // Set writes the login cookie.
-func Set(w http.ResponseWriter, value string) {
+func (s *Sessions) Set(w http.ResponseWriter, value string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookie,
 		Value:    value,
 		Path:     "/",
 		Expires:  time.Now().Add(sessionTTL),
 		HttpOnly: true,
+		Secure:   s.secure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
 // Clear expires the login cookie.
-func Clear(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+func (s *Sessions) Clear(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true,
+		Secure: s.secure})
 }
 
 // Require redirects unauthenticated browser requests to /login.

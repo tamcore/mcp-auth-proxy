@@ -86,7 +86,30 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
-	return accessLog(s.logger, strictTransport(s.cfg.BaseURL, mux))
+	return accessLog(s.logger, strictTransport(s.cfg.BaseURL, securityHeaders(crossOriginProtection().Handler(mux))))
+}
+
+// crossOriginProtection rejects cross-site browser POSTs (CSRF) everywhere
+// except the endpoints that clients and the ntfy web app call cross-origin.
+func crossOriginProtection() *http.CrossOriginProtection {
+	cop := http.NewCrossOriginProtection()
+	for _, p := range []string{"/mcp", "/mcp/", "/oauth/token", "/approve/{id}", "/deny/{id}"} {
+		cop.AddInsecureBypassPattern(p)
+	}
+	return cop
+}
+
+// securityHeaders keeps pages out of frames (clickjacking on Approve) and
+// limits them to same-origin content.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // strictTransport sends HSTS when the public origin is https, so browsers
@@ -187,6 +210,10 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSignButton(w http.ResponseWriter, r *http.Request, approve bool) {
+	if r.Method == http.MethodGet {
+		s.pages.Render(w, http.StatusOK, "result", ui.Page{Title: "Confirm", Data: confirmPage(approve)})
+		return
+	}
 	id := r.PathValue("id")
 	sig := r.URL.Query().Get("sig")
 	var err error
@@ -198,6 +225,16 @@ func (s *Server) handleSignButton(w http.ResponseWriter, r *http.Request, approv
 	status, res := signResult(approve, err)
 	res.Back = "/"
 	s.pages.Render(w, status, "result", ui.Page{Title: res.Heading, Data: res})
+}
+
+// confirmPage answers a GET (opened link, link preview): only the POST acts.
+func confirmPage(approve bool) ui.ResultData {
+	if approve {
+		return ui.ResultData{Tone: ui.ToneAsk, Heading: "Approve this request?",
+			Message: "The key gets a session and the waiting tool call can run.", Confirm: "Approve"}
+	}
+	return ui.ResultData{Tone: ui.ToneAsk, Heading: "Deny this request?",
+		Message: "The waiting tool call stays blocked.", Confirm: "Deny"}
 }
 
 func signResult(approve bool, err error) (int, ui.ResultData) {

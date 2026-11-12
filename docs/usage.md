@@ -26,7 +26,7 @@ Push notifications are per user. Under **Settings** every user enters their own 
 
 ## Settings and passkeys
 
-Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed). The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
+Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed). Logging out ends every web session of the user, on all devices. Five failed password logins in a row lock that username for a minute. The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
 
 ## The OTP contract (what your AI client sees)
 
@@ -42,7 +42,7 @@ Under **Settings** (`/settings`) users change their password (all their other br
 
 5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h, per-key override).
 
-Instead of the code you can tap **Approve** in the notification; the button URL is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is a 403.
+Instead of the code you can tap **Approve** in the notification; the button URL is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is a 403. Opening the URL in a browser (GET) only shows a confirmation button; only the POST acts, so link previews cannot approve.
 
 ## Upstream OAuth
 

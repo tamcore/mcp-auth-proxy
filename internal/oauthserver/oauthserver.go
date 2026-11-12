@@ -34,7 +34,6 @@ type authCode struct {
 	codeChallenge string
 	keyID         string
 	expiresAt     time.Time
-	used          bool
 }
 
 // Server is the client-facing authorization server.
@@ -161,11 +160,18 @@ func (s *Server) HandleConsent(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "server_error", "could not mint code")
 		return
 	}
-	loc := p.redirectURI + "?code=" + url.QueryEscape(code)
-	if p.state != "" {
-		loc += "&state=" + url.QueryEscape(p.state)
+	loc, err := url.Parse(p.redirectURI)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid_request", "unparsable redirect_uri")
+		return
 	}
-	http.Redirect(w, r, loc, http.StatusFound)
+	q := loc.Query()
+	q.Set("code", code)
+	if p.state != "" {
+		q.Set("state", p.state)
+	}
+	loc.RawQuery = q.Encode()
+	http.Redirect(w, r, loc.String(), http.StatusFound)
 }
 
 func (s *Server) createKey(ctx context.Context, label string, r *http.Request) (*store.Key, error) {
@@ -212,6 +218,11 @@ func (s *Server) mintCode(p *authorizeParams, keyID string) (string, error) {
 	}
 	code := hex.EncodeToString(raw)
 	s.mu.Lock()
+	for c, ac := range s.codes {
+		if !s.now().Before(ac.expiresAt) {
+			delete(s.codes, c)
+		}
+	}
 	s.codes[code] = &authCode{
 		clientID:      p.clientID,
 		redirectURI:   p.redirectURI,
@@ -268,15 +279,15 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// takeCode atomically marks the code used (single-use) and checks expiry.
+// takeCode removes the code (single-use) and checks expiry.
 func (s *Server) takeCode(code string) (*authCode, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ac, ok := s.codes[code]
-	if !ok || ac.used || !s.now().Before(ac.expiresAt) {
+	delete(s.codes, code)
+	if !ok || !s.now().Before(ac.expiresAt) {
 		return nil, false
 	}
-	ac.used = true
 	return ac, true
 }
 

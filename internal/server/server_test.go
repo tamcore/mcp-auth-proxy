@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -150,6 +151,23 @@ func TestAuthorizeRequiresWebLogin(t *testing.T) {
 		if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "/login") {
 			t.Fatalf("q=%q: location %q", q, loc)
 		}
+	}
+}
+
+func TestConsentRequiresWebLogin(t *testing.T) {
+	ts := newTestServer(t)
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	form := url.Values{"response_type": {"code"}, "client_id": {"c"}, "redirect_uri": {"https://x/cb"},
+		"code_challenge": {"x"}, "code_challenge_method": {"S256"}}
+	resp, err := client.PostForm(ts.URL+"/oauth/consent", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusFound || !strings.HasPrefix(loc, "/login") {
+		t.Fatalf("want 302 to login, got %d %q", resp.StatusCode, loc)
 	}
 }
 

@@ -82,7 +82,7 @@ func (s *Server) Handler() http.Handler {
 	s.webui.Register(mux)
 	mux.Handle("GET /static/", s.pages.Static())
 	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
-	mux.HandleFunc("POST /oauth/consent", s.as.HandleConsent)
+	mux.HandleFunc("POST /oauth/consent", s.requireLogin(s.as.HandleConsent))
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))

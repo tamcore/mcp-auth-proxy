@@ -72,9 +72,9 @@ type ceremony struct {
 }
 
 // maxCeremonies caps open ceremonies: passkey login begins unauthenticated.
+// A full map drops its oldest ceremony instead of refusing, so a flood cannot
+// lock out real logins, only make one retry.
 const maxCeremonies = 1000
-
-var errTooManyCeremonies = errors.New("webui: too many open passkey ceremonies")
 
 // ponytail: in-memory, lost on restart; the user just starts again.
 type ceremonies struct {
@@ -98,8 +98,13 @@ func (c *ceremonies) start(w http.ResponseWriter, data *webauthn.SessionData, us
 		}
 	}
 	if len(c.m) >= maxCeremonies {
-		c.mu.Unlock()
-		return errTooManyCeremonies
+		oldest := ""
+		for k, v := range c.m {
+			if oldest == "" || v.deadline.Before(c.m[oldest].deadline) {
+				oldest = k
+			}
+		}
+		delete(c.m, oldest)
 	}
 	c.m[id] = ceremony{data: *data, userID: userID, deadline: now.Add(ceremonyTTL)}
 	c.mu.Unlock()

@@ -81,12 +81,15 @@ func TestPasskeyLoginRequiresUserVerification(t *testing.T) {
 	}
 }
 
-func TestCeremoniesAreCapped(t *testing.T) {
+func TestFullCeremonyMapDropsTheOldestInsteadOfRefusing(t *testing.T) {
 	c := &ceremonies{m: map[string]ceremony{}}
 	for range maxCeremonies {
-		c.m[strings.Repeat("x", len(c.m)+1)] = ceremony{deadline: time.Now().Add(time.Minute)}
+		c.m[strings.Repeat("x", len(c.m)+1)] = ceremony{deadline: time.Now().Add(time.Duration(len(c.m)+1) * time.Second)}
 	}
-	if err := c.start(httptest.NewRecorder(), &webauthn.SessionData{}, ""); err == nil {
-		t.Fatal("a full ceremony map must refuse new ceremonies")
+	if err := c.start(httptest.NewRecorder(), &webauthn.SessionData{}, ""); err != nil {
+		t.Fatalf("a flood must not lock out a new login: %v", err)
+	}
+	if _, ok := c.m["x"]; ok || len(c.m) != maxCeremonies {
+		t.Fatalf("the oldest ceremony must make room: %d entries", len(c.m))
 	}
 }

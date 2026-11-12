@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +44,10 @@ func (ui *WebUI) handleAdminDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := ui.store.SetUserDisabled(r.Context(), id, disabled); err != nil {
+		if errors.Is(err, store.ErrLastAdmin) {
+			http.Error(w, "the last enabled admin cannot be disabled", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, "could not update user", http.StatusInternalServerError)
 		return
 	}

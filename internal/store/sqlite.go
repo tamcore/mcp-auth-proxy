@@ -46,6 +46,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err := ensureDir(path); err != nil {
 		return nil, err
 	}
+	if err := ownerOnly(path); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("store: open: %w", err)
@@ -72,6 +75,23 @@ func (s *Store) Close() error { return s.db.Close() }
 // DB exposes the raw handle for package-internal use only within this package's
 // files; other packages go through the typed methods.
 func (s *Store) DB() *sql.DB { return s.db }
+
+// ownerOnly creates the database file 0600, or tightens an existing one: it
+// holds upstream and push tokens. SQLite gives its WAL and SHM files the same
+// mode as the database.
+func ownerOnly(path string) error {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("store: open database file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("store: open database file: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("store: restrict database file: %w", err)
+	}
+	return nil
+}
 
 func ensureDir(path string) error {
 	dir := filepath.Dir(path)

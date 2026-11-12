@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
-# A literal prefix, distinct from the one ci.yaml uses, so the gates job does
-# not cancel the run that started it. cancel-in-progress is false because a
-# release must not be interrupted midway through publishing.
+# A literal prefix, distinct from the one ci.yaml uses. The called workflow
+# inherits this workflow's github.workflow, so a shared expression would make
+# the gates job cancel the run that started it.
+#
+# cancel-in-progress is false because a release must not be interrupted midway
+# through publishing.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -24,6 +27,8 @@ jobs:
   # commit, so a tag can never ship artifacts that did not pass the gates.
   gates:
     name: Gates
+    permissions:
+      contents: read
     uses: ./.github/workflows/ci.yaml
 
   release:
@@ -69,8 +74,11 @@ jobs:
   chart:
     # Publishes the Helm chart as an OCI artifact so a GitOps repository can
     # depend on a released version instead of vendoring a copy of this
-    # directory. It runs after `release`, because the chart's appVersion points
-    # at an image tag that must exist before the chart claiming it does.
+    # directory. Chart version and appVersion both track the release tag, so
+    # `helm show chart` names the image the chart defaults to.
+    #
+    # It runs after `release`, because the chart's appVersion points at an
+    # image tag that must exist before the chart claiming it does.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: release

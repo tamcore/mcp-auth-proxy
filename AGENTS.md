@@ -92,8 +92,14 @@ only same-origin `/static/` assets; never add a CDN, web font, or other
 external resource. `internal/ui/assets/app.css` is generated and committed.
 
 CI additionally runs the test suite with `-race` (the local sandbox may lack
-gcc; see `.github/workflows/ci.yaml`), the live suite against a freshly built
-garmin-mcp over stdio, and `helm lint`/`helm template` for the chart.
+gcc; see `.github/workflows/ci.yaml`) and enforces an 80% coverage floor per
+package (with an explicit, two-way-checked exception list), the e2e and live
+suites with a check that every declared test really passed, fuzz smoke runs of
+every untagged `FuzzX` target, govulncheck, dependency review on PRs, a
+reproducible-build check, `goreleaser check` plus a snapshot build, and a
+hardened container smoke test (nonroot, read-only root, owner-only state,
+fail-closed on an unwritable `/data`). `helm lint`/`helm template` cover the
+chart.
 
 Releases are cut by pushing a `v*` tag: `.github/workflows/release.yaml`
 re-runs CI as a gate, then GoReleaser builds archives + the GHCR image and

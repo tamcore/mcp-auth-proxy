@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+# The group name is a literal, not github.workflow. A called workflow inherits
+# the caller's github.workflow, so sharing that expression with release.yaml
+# would put both in one group and the release run would cancel itself before
+# it could publish.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -18,6 +22,8 @@ concurrency:
 env:
   # Pinned tool versions. CI must never resolve a floating "latest".
   GOLANGCI_LINT_VERSION: v2.15.0 # renovate: datasource=github-releases depName=golangci/golangci-lint
+  GORELEASER_VERSION: v2.20.0 # renovate: datasource=github-releases depName=goreleaser/goreleaser
+  GOVULNCHECK_VERSION: v1.9.0 # renovate: datasource=go depName=golang.org/x/vuln
   TAILWIND_VERSION: v4.3.5 # renovate: datasource=github-releases depName=tailwindlabs/tailwindcss
 
 jobs:
@@ -34,7 +40,9 @@ jobs:
         run: |
           unformatted="$(gofmt -l .)"
           if [ -n "${unformatted}" ]; then
-            echo "::error::gofmt reported unformatted files: ${unformatted}"
+            echo "::error::gofmt reported unformatted files:"
+            echo "${unformatted}"
+            gofmt -d .
             exit 1
           fi
 
@@ -43,6 +51,9 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
 
+      # The stylesheet is generated and committed so `go build` needs no Node
+      # toolchain; this proves the committed file matches the templates. The
+      # CLI binary is checksum-verified against the release's own sums file.
       - name: Verify generated Tailwind CSS
         run: |
           bin="${RUNNER_TEMP}/bin"
@@ -59,12 +70,33 @@ jobs:
       - name: go vet
         run: go vet ./... && go vet -tags e2e ./e2e/ && go vet -tags live ./live/
 
+      # go vet uses the host GOOS, and the build matrix runs `go build`, which
+      # never compiles _test.go. Without this, platform-specific code and its
+      # tests are only ever type-checked for whichever GOOS the runner is.
       - name: go vet for every supported GOOS
         run: |
           for os in linux darwin; do
             echo "== GOOS=${os}"
             GOOS="${os}" go vet ./... || exit 1
           done
+
+  # Dependency review is an enforceable PR gate, not only a repository setting.
+  # It blocks a pull request that introduces a vulnerable or disallowed-license
+  # dependency. It only runs on pull_request, because the action needs a base
+  # and a head to compare.
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: low
+          # Matches the licenses of the current dependency set. A dependency
+          # under anything else needs a decision, not an automatic pass.
+          # The LicenseRef is the PATENTS grant of golang.org/x modules.
+          allow-licenses: Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MIT, LicenseRef-scancode-google-patent-license-golang
 
   lint:
     name: Lint
@@ -79,13 +111,18 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
 
+      # Verifies the `formatters` block of .golangci.yml and fails on any
+      # difference. Reuses the binary the action just installed.
+      - name: Verify formatters
+        run: golangci-lint fmt --diff
+
       - name: Lint e2e and live (build tags)
         run: |
           golangci-lint run --build-tags e2e ./e2e/
           golangci-lint run --build-tags live ./live/
 
   test:
-    name: Test
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,8 +133,82 @@ jobs:
       # -race runs here. The local dev sandbox may lack gcc, so the race
       # detector is a CI-only gate and is intentionally not part of the local
       # quality-gate list in AGENTS.md.
-      - name: Unit tests (with -race)
-        run: go test -race -count=1 ./...
+      - name: go test -race with coverage
+        run: go test -race -count=1 -covermode=atomic -coverprofile=cover.out ./...
+
+      - name: Coverage summary
+        run: go tool cover -func=cover.out | tail -1
+
+      # The 80% rule is enforced per package rather than as one repository
+      # average: an average lets a well-tested package pay for a neglected one.
+      #
+      # The exception list is explicit and checked in both directions. A package
+      # that has reached the floor must be removed from it, and a name that is
+      # not in the profile fails too, so an exception cannot outlive its reason
+      # or survive a rename as a silent blanket skip.
+      - name: Enforce the per-package coverage floor
+        env:
+          COVERAGE_FLOOR: "80"
+          # cmd/mcp-auth-proxy is the process entry point; the e2e job runs the
+          #   built binary.
+          # The rest is known debt: these packages are below the floor today
+          #   and leave this list as their tests catch up. The e2e suite
+          #   exercises much of them, but this profile only sees unit tests.
+          COVERAGE_EXCEPTIONS: >-
+            github.com/tamcore/mcp-auth-proxy/cmd/mcp-auth-proxy
+            github.com/tamcore/mcp-auth-proxy/internal/cmd
+            github.com/tamcore/mcp-auth-proxy/internal/upstream
+            github.com/tamcore/mcp-auth-proxy/internal/store
+            github.com/tamcore/mcp-auth-proxy/internal/config
+            github.com/tamcore/mcp-auth-proxy/internal/webui
+            github.com/tamcore/mcp-auth-proxy/internal/oauthserver
+            github.com/tamcore/mcp-auth-proxy/internal/mcpserver
+            github.com/tamcore/mcp-auth-proxy/internal/gate
+        run: |
+          set -o pipefail
+          awk -v floor="${COVERAGE_FLOOR}" -v except="${COVERAGE_EXCEPTIONS}" '
+            BEGIN {
+              count = split(except, listed, " ")
+              for (i = 1; i <= count; i++) if (listed[i] != "") allowed[listed[i]] = 1
+            }
+            # A profile line is "package/file.go:from.col,to.col statements count".
+            NR > 1 {
+              file = $1
+              sub(/:[0-9]+\.[0-9]+,[0-9]+\.[0-9]+$/, "", file)
+              pkg = file
+              sub(/\/[^\/]*$/, "", pkg)
+              if (!(pkg in total)) { total[pkg] = 0; packages++ }
+              total[pkg] += $2
+              if ($3 > 0) covered[pkg] += $2
+            }
+            END {
+              if (packages == 0) {
+                print "::error::the coverage profile lists no package; this gate would pass vacuously"
+                exit 1
+              }
+              failed = 0
+              for (pkg in total) {
+                if (total[pkg] == 0) continue
+                pct = 100 * covered[pkg] / total[pkg]
+                printf "%-56s %5.1f%%%s\n", pkg, pct, (pkg in allowed) ? "  listed as an exception" : ""
+                if (pct < floor && !(pkg in allowed)) {
+                  printf "::error::%s is at %.1f%%, under the %s%% floor\n", pkg, pct, floor
+                  failed = 1
+                }
+                if (pct >= floor && (pkg in allowed)) {
+                  printf "::error::%s reached %.1f%% and must leave the exception list\n", pkg, pct
+                  failed = 1
+                }
+              }
+              for (pkg in allowed) {
+                if (!(pkg in total)) {
+                  printf "::error::the exception %s is not in the profile; drop it or fix the name\n", pkg
+                  failed = 1
+                }
+              }
+              exit failed
+            }
+          ' cover.out | sort
 
   e2e:
     name: E2E
@@ -114,7 +225,12 @@ jobs:
         run: go run github.com/mxschmitt/playwright-go/cmd/playwright install --only-shell chromium
 
       - name: E2E tests (with -race)
-        run: go test -race -tags e2e -count=1 -timeout 300s ./e2e/
+        run: |
+          set -o pipefail
+          go test -json -race -tags e2e -count=1 -timeout 300s ./e2e/ | tee e2e.json
+
+      - name: Assert the E2E suite really ran
+        run: .github/scripts/assert-suite-ran.sh ./e2e e2e.json
 
   live:
     name: Live (real garmin-mcp upstream via stdio)
@@ -133,13 +249,98 @@ jobs:
         working-directory: garmin-mcp
         run: go build -o /tmp/garmin-mcp ./cmd/garmin-mcp
 
+      # The live suite skips itself when LIVE_GARMIN_BIN is unset, so the
+      # assertion below is what turns a skipped suite into a red build.
       - name: Live tests
         env:
           LIVE_GARMIN_BIN: /tmp/garmin-mcp
-        run: go test -tags live -count=1 -timeout 300s ./live/
+        run: |
+          set -o pipefail
+          go test -json -tags live -count=1 -timeout 300s ./live/ | tee live.json
 
-  build:
-    name: Build
+      - name: Assert the live suite really ran
+        run: .github/scripts/assert-suite-ran.sh ./live live.json
+
+  fuzz-smoke:
+    name: Fuzz smoke
+    runs-on: ubuntu-latest
+    # Bounds a fuzz target that never returns control; a hang is a real
+    # finding, not only a crash. -race is deliberately off: it slows fuzzing by
+    # an order of magnitude, and the unit job already runs these functions
+    # under the race detector.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Every FuzzX target gets a bounded run. Targets are discovered from
+      # source, so a new one needs no workflow edit, and finding none fails
+      # loudly. Files with a //go:build line are skipped: a tagged target is
+      # never compiled by this untagged run. The budget counts executions, not
+      # seconds, so a loaded runner cannot turn the gate red without a finding.
+      - name: Run every fuzz target for a bounded smoke duration
+        env:
+          FUZZ_SMOKE_EXECS: 150000x
+        run: |
+          set -o pipefail
+          mapfile -t candidates < <(grep -rl '^func Fuzz' --include='*_test.go' .)
+          files=()
+          for candidate in "${candidates[@]}"; do
+            if ! grep -q '^//go:build' "${candidate}"; then
+              files+=("${candidate}")
+            fi
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::no fuzz targets found; this job would pass vacuously"
+            exit 1
+          fi
+
+          ran=0
+          for file in "${files[@]}"; do
+            dir="./$(dirname "${file}")"
+            for name in $(grep -oh '^func Fuzz[A-Za-z0-9_]*' "${file}" | sed -E 's/^func //'); do
+              echo "== ${name} (${dir}) =="
+              go test -run='^$' -fuzz="^${name}\$" -fuzztime="${FUZZ_SMOKE_EXECS}" "${dir}"
+              ran=$((ran + 1))
+            done
+          done
+          echo "fuzz targets run: ${ran}"
+
+  reproducible-build:
+    name: Reproducible build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      # Two builds of the same commit, each with its own GOCACHE so the second
+      # is a real recompile. -trimpath drops the build directory and the
+      # ldflags are fixed literals, so any other nondeterminism (build ID,
+      # timestamps, map order) shows up as a hash mismatch.
+      - name: Build twice from independent caches and compare
+        env:
+          CGO_ENABLED: "0"
+          LDFLAGS: -s -w -X main.version=repro-check -X main.commit=0000000000000000000000000000000000000000
+        run: |
+          set -o pipefail
+          GOCACHE="${RUNNER_TEMP}/gocache-1" go build -trimpath -ldflags "${LDFLAGS}" -o "${RUNNER_TEMP}/build-1/mcp-auth-proxy" ./cmd/mcp-auth-proxy
+          GOCACHE="${RUNNER_TEMP}/gocache-2" go build -trimpath -ldflags "${LDFLAGS}" -o "${RUNNER_TEMP}/build-2/mcp-auth-proxy" ./cmd/mcp-auth-proxy
+          hash1="$(sha256sum "${RUNNER_TEMP}/build-1/mcp-auth-proxy" | cut -d' ' -f1)"
+          hash2="$(sha256sum "${RUNNER_TEMP}/build-2/mcp-auth-proxy" | cut -d' ' -f1)"
+          echo "build 1: ${hash1}"
+          echo "build 2: ${hash2}"
+          if [ "${hash1}" != "${hash2}" ]; then
+            echo "::error::two builds of the same commit produced different binaries"
+            exit 1
+          fi
+
+  vulncheck:
+    name: govulncheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -147,12 +348,274 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: go build (all platforms)
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@${{ env.GOVULNCHECK_VERSION }}
+
+      - name: govulncheck
+        run: govulncheck ./...
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: go build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build ./...
+
+  # The release config is otherwise only exercised by a tag; a broken
+  # .goreleaser.yaml must fail here, not after the tag is pushed.
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: goreleaser check
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: check
+
+      # Snapshot build only: signing and image publishing need release
+      # credentials and are exercised by the release workflow.
+      - name: goreleaser snapshot
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          args: release --snapshot --clean --skip=sign,docker
+
+  container:
+    name: Container build and hardening smoke test
+    runs-on: ubuntu-latest
+    # The start-up steps poll a running server and wait on a deliberate
+    # failure, so this job can stall rather than fail.
+    timeout-minutes: 20
+    env:
+      # Helper images only (volume chown, probing from the server's network
+      # namespace); never shipped, but pinned by digest all the same.
+      BUSYBOX_IMAGE: busybox:1.36.1@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+      CURL_IMAGE: curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build linux/amd64 binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
         run: |
-          CGO_ENABLED=0 go build ./...
-          for os in linux darwin; do
-            for arch in amd64 arm64; do
-              echo "== ${os}/${arch}"
-              CGO_ENABLED=0 GOOS="${os}" GOARCH="${arch}" go build ./...
-            done
+          mkdir -p image-context/linux/amd64
+          go build -trimpath -ldflags '-s -w' -o image-context/linux/amd64/mcp-auth-proxy ./cmd/mcp-auth-proxy
+          # The image carries its licence, so the build context needs it too;
+          # GoReleaser declares it as an extra file for the same reason.
+          cp LICENSE image-context/
+
+      - name: Build image
+        run: |
+          docker build --build-arg TARGETPLATFORM=linux/amd64 -f Dockerfile -t mcp-auth-proxy:ci image-context
+
+      - name: Assert the licence ships in the image
+        run: |
+          # Distroless has no shell, so files are read by exporting the
+          # filesystem rather than by running anything.
+          container="$(docker create mcp-auth-proxy:ci)"
+          trap 'docker rm -f "${container}" >/dev/null' EXIT
+          docker export "${container}" >image.tar
+          for file in LICENSE; do
+            if ! tar -xOf image.tar "licenses/mcp-auth-proxy/${file}" >extracted; then
+              echo "::error::${file} is missing from the runtime image"
+              exit 1
+            fi
+            size="$(wc -c <extracted)"
+            echo "${file}: ${size} bytes"
+            if [ "${size}" -lt 100 ]; then
+              echo "::error::${file} is truncated in the runtime image"
+              exit 1
+            fi
           done
+
+      - name: Assert numeric nonroot user
+        run: |
+          user="$(docker inspect -f '{{ .Config.User }}' mcp-auth-proxy:ci)"
+          echo "image user: ${user}"
+          test "${user}" = "65532:65532"
+
+      - name: Assert no shell in image
+        run: |
+          for shell in /bin/sh /bin/bash /busybox/sh; do
+            if docker run --rm --entrypoint "${shell}" mcp-auth-proxy:ci -c true 2>/dev/null; then
+              echo "::error::unexpected shell ${shell} present in runtime image"
+              exit 1
+            fi
+          done
+
+      - name: Run hardened smoke test
+        run: |
+          docker run --rm --read-only --user 65532:65532 --cap-drop=ALL \
+            --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            mcp-auth-proxy:ci --help
+
+      # Everything below proves the shape the chart runs: read-only root
+      # filesystem, nonroot user, config mounted read-only, and a PVC-like
+      # volume for state. An image that passes the checks above but cannot
+      # start, cannot write its database and secret, or hangs when the volume
+      # is unwritable is exactly what a first real rollout would hit.
+      - name: Prepare config and a writable /data volume
+        run: |
+          mkdir -p "${RUNNER_TEMP}/config"
+          cat >"${RUNNER_TEMP}/config/config.yaml" <<'YAML'
+          base_url: http://127.0.0.1:8080
+          listen_addr: 0.0.0.0:8080
+          ops_listen_addr: 0.0.0.0:9090
+          state_dir: /data
+          users: [ci]
+          upstreams: [{name: echo, command: [/usr/local/bin/mcp-auth-proxy, dev-echo]}]
+          YAML
+          chmod 644 "${RUNNER_TEMP}/config/config.yaml"
+          # A fresh PVC is root-owned until something chowns it (fsGroup in the
+          # chart); this is the only step that runs as root.
+          docker volume create mcp-auth-proxy-ci-data
+          docker run --rm -v mcp-auth-proxy-ci-data:/data "${BUSYBOX_IMAGE}" chown 65532:65532 /data
+
+      - name: Start the server hardened, with the volume mounted
+        run: |
+          docker run -d --name mcp-auth-proxy-ci-serve \
+            --read-only --user 65532:65532 --cap-drop=ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v mcp-auth-proxy-ci-data:/data \
+            -v "${RUNNER_TEMP}/config:/etc/mcp-auth-proxy:ro" \
+            mcp-auth-proxy:ci serve --config /etc/mcp-auth-proxy/config.yaml
+
+      - name: Wait for the server to report ready, not merely alive
+        run: |
+          # Probed from a second container in the server's network namespace:
+          # the image ships no shell and no curl.
+          probe() {
+            timeout --kill-after=5s 15 docker run --rm --network container:mcp-auth-proxy-ci-serve \
+              "${CURL_IMAGE}" -s --max-time 5 -o /dev/null -w '%{http_code}' "$1" || echo 000
+          }
+          ready=""
+          for _ in $(seq 1 30); do
+            if [ "$(probe http://127.0.0.1:9090/readyz)" = "200" ]; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ -z "${ready}" ]; then
+            echo "::error::the server never reported ready within 30s"
+            docker logs mcp-auth-proxy-ci-serve
+            exit 1
+          fi
+          for url in http://127.0.0.1:9090/healthz http://127.0.0.1:8080/login; do
+            code="$(probe "${url}")"
+            echo "${url}: ${code}"
+            if [ "${code}" != "200" ]; then
+              echo "::error::${url} answered ${code}"
+              exit 1
+            fi
+          done
+          # The ops endpoints must not be served on the app listener.
+          code="$(probe http://127.0.0.1:8080/metrics)"
+          if [ "${code}" = "200" ]; then
+            echo "::error::/metrics is reachable on the app listener"
+            exit 1
+          fi
+
+      - name: Assert the database and secret exist under the volume, owner-only
+        run: |
+          docker run --rm -v mcp-auth-proxy-ci-data:/data "${BUSYBOX_IMAGE}" sh -c '
+            set -e
+            for target in /data/proxy.db /data/sign.secret; do
+              if [ ! -f "${target}" ]; then
+                echo "::error::${target} was not created under the mounted volume"
+                exit 1
+              fi
+              mode="$(stat -c %a "${target}")"
+              owner="$(stat -c %u:%g "${target}")"
+              echo "${target}: mode=${mode} owner=${owner}"
+              if [ "${mode}" != "600" ]; then
+                echo "::error::${target} is not owner-only (mode ${mode})"
+                exit 1
+              fi
+              if [ "${owner}" != "65532:65532" ]; then
+                echo "::error::${target} is not owned by the nonroot uid/gid (owner ${owner})"
+                exit 1
+              fi
+            done
+          '
+
+      - name: Stop the smoke test
+        if: always()
+        run: |
+          docker logs mcp-auth-proxy-ci-serve || true
+          docker rm -f mcp-auth-proxy-ci-serve >/dev/null 2>&1 || true
+          docker volume rm mcp-auth-proxy-ci-data >/dev/null 2>&1 || true
+
+      - name: Assert start-up fails closed when /data is not writable
+        run: |
+          # A rollout onto a read-only PVC must refuse honestly and promptly,
+          # never start up broken and never hang.
+          docker volume create mcp-auth-proxy-ci-data-ro
+          docker run --rm -v mcp-auth-proxy-ci-data-ro:/data "${BUSYBOX_IMAGE}" chown 65532:65532 /data
+
+          set +e
+          timeout --kill-after=5s 30 docker run --name mcp-auth-proxy-ci-fail \
+            --read-only --user 65532:65532 --cap-drop=ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v mcp-auth-proxy-ci-data-ro:/data:ro \
+            -v "${RUNNER_TEMP}/config:/etc/mcp-auth-proxy:ro" \
+            mcp-auth-proxy:ci serve --config /etc/mcp-auth-proxy/config.yaml
+          ec=$?
+          set -e
+
+          echo "exit code: ${ec}"
+          logs="$(docker logs mcp-auth-proxy-ci-fail 2>&1 || true)"
+          echo "${logs}"
+          docker rm -f mcp-auth-proxy-ci-fail >/dev/null 2>&1 || true
+          docker volume rm mcp-auth-proxy-ci-data-ro >/dev/null 2>&1 || true
+
+          # Any of these would otherwise read as the refusal this step asserts.
+          case "${ec}" in
+            0)
+              echo "::error::the server started despite a read-only /data"
+              exit 1 ;;
+            124|137)
+              echo "::error::the server hung instead of failing within 30s"
+              exit 1 ;;
+            125)
+              echo "::error::docker failed to run the container, so the refusal was never tested"
+              exit 1 ;;
+            126|127)
+              echo "::error::the entrypoint is not executable or not found, so the refusal was never tested"
+              exit 1 ;;
+          esac
+
+          # The exit status only proves it failed, not why.
+          case "${logs}" in
+            *"read-only file system"*|*"readonly database"*) ;;
+            *)
+              echo "::error::the server failed, but not because /data is read-only"
+              exit 1 ;;
+          esac

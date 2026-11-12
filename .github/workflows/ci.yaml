@@ -429,20 +429,20 @@ jobs:
           go build -trimpath -ldflags '-s -w' -o image-context/linux/amd64/mcp-auth-proxy ./cmd/mcp-auth-proxy
           # The image carries its licence, so the build context needs it too;
           # GoReleaser declares it as an extra file for the same reason.
-          cp LICENSE image-context/
+          cp LICENSE THIRD_PARTY_NOTICES.md image-context/
 
       - name: Build image
         run: |
           docker build --build-arg TARGETPLATFORM=linux/amd64 -f Dockerfile -t mcp-auth-proxy:ci image-context
 
-      - name: Assert the licence ships in the image
+      - name: Assert the licence and notices ship in the image
         run: |
           # Distroless has no shell, so files are read by exporting the
           # filesystem rather than by running anything.
           container="$(docker create mcp-auth-proxy:ci)"
           trap 'docker rm -f "${container}" >/dev/null' EXIT
           docker export "${container}" >image.tar
-          for file in LICENSE; do
+          for file in LICENSE THIRD_PARTY_NOTICES.md; do
             if ! tar -xOf image.tar "licenses/mcp-auth-proxy/${file}" >extracted; then
               echo "::error::${file} is missing from the runtime image"
               exit 1

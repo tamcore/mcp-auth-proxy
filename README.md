@@ -86,6 +86,13 @@ push target, codes appear only in the portal. Keys created with the CLI have
 no owner; their codes and Approve/Deny URLs are logged. A failed publish is
 logged at WARN.
 
+Under **Settings** (`/settings`) users change their password (all their other
+browser sessions are logged out), manage **passkeys** (add, see last use,
+delete) and set their push target. The login page offers "Sign in with a
+passkey" (discoverable credentials, no username needed). The passkey relying
+party is derived from `base_url`: its host is the RP ID, so `base_url` must use
+a host name and must not change once passkeys exist.
+
 Open requests are always listed at the top of the portal with their code and
 Approve/Deny buttons; the page reloads itself when requests appear or resolve.
 Approving in the portal is equivalent to the Approve button in the push.
@@ -167,6 +174,11 @@ helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
   --set config.baseURL=https://mcp.example.com \
   --set 'config.users[0]=alice' --set 'config.admins[0]=alice'
 ```
+
+Passkeys need https. With `httpRoute.httpsRedirect.enabled` the chart adds a
+permanent http → https redirect on the gateway's http listener, and the proxy
+sends HSTS whenever `base_url` is https. Pin `httpRoute.parentRefs[].sectionName`
+to the https listener; otherwise the app route also serves plain http.
 
 The image trusts only public CAs. If a user's ntfy server or an upstream uses a private CA,
 pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the

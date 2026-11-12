@@ -249,3 +249,14 @@ func TestApproveResultLinksBackToPortal(t *testing.T) {
 		t.Fatal("result page must link back to the portal")
 	}
 }
+
+func TestHSTSOnlyForHTTPSBaseURL(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {})
+	for base, want := range map[string]bool{"https://proxy.example": true, "http://127.0.0.1:8080": false} {
+		rec := httptest.NewRecorder()
+		strictTransport(base, ok).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if got := rec.Header().Get("Strict-Transport-Security") != ""; got != want {
+			t.Fatalf("%s: HSTS set=%v, want %v", base, got, want)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package webui
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
@@ -12,10 +13,7 @@ func (ui *WebUI) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	next := r.URL.Query().Get("next")
-	if next == "" {
-		next = "/"
-	}
+	next := safeNext(r.URL.Query().Get("next"))
 	ui.pages.Render(w, http.StatusOK, "login", page("Log in", nil, view.LoginData{Next: next}))
 }
 
@@ -34,21 +32,26 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil || user.Disabled || !store.CheckPassword(user.PasswordHash, password) {
 		ui.pages.Render(w, http.StatusUnauthorized, "login", page("Log in", nil, view.LoginData{
-			Next:  r.PostForm.Get("next"),
+			Next:  safeNext(r.PostForm.Get("next")),
 			Error: "Wrong username or password.",
 		}))
 		return
 	}
 	ui.logger.Info("login ok", "user", user.Username, "remote", r.RemoteAddr)
-	Set(w, ui.sessions.Issue(user.Username))
-	next := r.PostForm.Get("next")
-	if next == "" {
-		next = "/"
-	}
-	http.Redirect(w, r, next, http.StatusFound)
+	Set(w, ui.sessions.IssueFor(user))
+	http.Redirect(w, r, safeNext(r.PostForm.Get("next")), http.StatusFound)
 }
 
 func (ui *WebUI) handleLogout(w http.ResponseWriter, r *http.Request) {
 	Clear(w)
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// safeNext keeps post-login redirects on this site: only absolute paths,
+// never scheme-relative ("//host") or backslash tricks.
+func safeNext(next string) string {
+	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
+		return "/"
+	}
+	return next
 }

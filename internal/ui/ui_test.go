@@ -44,7 +44,9 @@ func TestEveryPageRendersSelfContained(t *testing.T) {
 			Users:  []*store.User{{ID: "u1", Username: "bob"}},
 		}},
 		"consent": {Data: ConsentData{Client: "Claude", ClientID: "claude"}},
-		"result":  {Data: ResultData{Tone: ToneOK, Heading: "Approved", Message: "m"}},
+		"settings": {User: alice, Data: SettingsData{PasskeysEnabled: true, NotifyURL: "https://ntfy.sh",
+			Passkeys: []PasskeyView{{ID: "AQID", Name: "laptop", Created: time.Unix(0, 0).UTC()}}}},
+		"result": {Data: ResultData{Tone: ToneOK, Heading: "Approved", Message: "m"}},
 	}
 	for name, p := range pages {
 		code, body := render(t, r, name, p)
@@ -118,5 +120,21 @@ func TestStatic(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown asset: %d", resp.StatusCode)
+	}
+}
+
+func TestNavMarksCurrentSection(t *testing.T) {
+	r := New(nil)
+	user := &User{Name: testUser, Admin: true}
+	for page, want := range map[string]string{
+		"portal":   `href="/" aria-current="page"`,
+		"audit":    `href="/portal/audit" aria-current="page"`,
+		"settings": `href="/settings" aria-current="page"`,
+		"admin":    `href="/admin" aria-current="page"`,
+	} {
+		_, body := render(t, r, page, Page{User: user, Data: map[string]any{}})
+		if !strings.Contains(body, want) || strings.Count(body, `aria-current="page"`) != 1 {
+			t.Fatalf("%s: want exactly one current link %q", page, want)
+		}
 	}
 }

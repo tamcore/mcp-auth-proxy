@@ -1,0 +1,90 @@
+{{define "content"}}{{with .Data}}
+<h1 class="text-xl font-semibold text-slate-900 dark:text-white">Settings</h1>
+{{with .Error}}<p class="alert-error" role="alert">{{.}}</p>{{end}}
+{{with .Flash}}<p class="rounded-xl bg-teal-50 px-3 py-2 text-sm text-teal-900 ring-1 ring-teal-200 dark:bg-teal-400/10 dark:text-teal-100 dark:ring-teal-400/30" role="status">{{.}}</p>{{end}}
+
+<section class="card" aria-labelledby="password">
+  <h2 id="password" class="card-title">Change password</h2>
+  <p class="muted mb-4">All your other browser sessions are logged out; this one stays.</p>
+  <form method="post" action="/settings/password" class="grid gap-4 sm:grid-cols-3">
+    <div>
+      <label class="field-label" for="current">Current password</label>
+      <input class="field" id="current" type="password" name="current" required autocomplete="current-password">
+    </div>
+    <div>
+      <label class="field-label" for="new-password">New password</label>
+      <input class="field" id="new-password" type="password" name="password" required minlength="8" autocomplete="new-password">
+    </div>
+    <div>
+      <label class="field-label" for="new-password2">Repeat</label>
+      <input class="field" id="new-password2" type="password" name="password2" required minlength="8" autocomplete="new-password">
+    </div>
+    <div class="sm:col-span-3"><button type="submit" class="btn">Change password</button></div>
+  </form>
+</section>
+
+<section class="card" aria-labelledby="passkeys">
+  <h2 id="passkeys" class="card-title">Passkeys</h2>
+  {{if not .PasskeysEnabled}}
+  <p class="muted">Passkeys need a base_url with a host name.</p>
+  {{else}}
+  <p class="muted mb-4">Sign in without a password, with your device's fingerprint, face or PIN.</p>
+  {{if .Passkeys}}
+  <ul class="mb-5 divide-y divide-slate-200 dark:divide-slate-700">
+    {{range .Passkeys}}
+    <li class="flex flex-wrap items-center gap-2 py-3 first:pt-0" data-testid="passkey">
+      <div class="min-w-0 flex-1">
+        <strong>{{.Name}}</strong>
+        <p class="muted text-xs">added {{when (ptr .Created)}} · last used {{when .LastUsed}}</p>
+      </div>
+      <form method="post" action="/settings/passkeys/delete">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn-danger">Delete</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="mb-4 text-sm">No passkeys yet.</p>
+  {{end}}
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="min-w-48 flex-1">
+      <label class="field-label" for="passkey-name">Name</label>
+      <input class="field" id="passkey-name" type="text" maxlength="60" placeholder="e.g. MacBook Touch ID">
+    </div>
+    <button type="button" class="btn" data-passkey-add>Add passkey</button>
+  </div>
+  <p class="alert-error mt-3" role="alert" data-passkey-error hidden></p>
+  {{end}}
+</section>
+
+<section class="card" aria-labelledby="notify">
+  <h2 id="notify" class="card-title">Push notifications</h2>
+  {{if .NotifyURL}}
+  <p class="mb-4 text-sm">Codes for your keys go to <code class="mono">{{.NotifyURL}}/{{.NotifyTopic}}</code>. Leave the token empty to keep it.</p>
+  {{else}}
+  <p class="alert-error mb-4">No push target set. Codes for your keys only appear on this page.</p>
+  {{end}}
+  <form method="post" action="/portal/notify" class="grid gap-4 sm:grid-cols-3">
+    <div>
+      <label class="field-label" for="ntfy-url">ntfy server</label>
+      <input class="field" id="ntfy-url" type="url" name="url" required value="{{or .NotifyURL "https://ntfy.sh"}}">
+    </div>
+    <div>
+      <label class="field-label" for="ntfy-topic">Topic</label>
+      <input class="field" id="ntfy-topic" type="text" name="topic" autocomplete="off" required value="{{.NotifyTopic}}" placeholder="your-private-topic">
+    </div>
+    <div>
+      <label class="field-label" for="ntfy-token">Access token <span class="muted">(optional)</span></label>
+      <input class="field" id="ntfy-token" type="password" name="token" autocomplete="off" placeholder="{{if .NotifyURL}}unchanged{{else}}tk_…{{end}}">
+    </div>
+    <div class="flex flex-wrap gap-2 sm:col-span-3">
+      <button type="submit" class="btn">Save and send test push</button>
+    </div>
+  </form>
+  {{if .NotifyURL}}
+  <form method="post" action="/portal/notify/delete" class="mt-3"><button class="btn-ghost">Remove push target</button></form>
+  {{end}}
+</section>
+
+{{end}}{{end}}

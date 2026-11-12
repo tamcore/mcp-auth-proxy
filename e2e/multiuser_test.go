@@ -45,7 +45,7 @@ func startMultiUserEnv(t *testing.T) (*env, *lockedBuffer) {
 	dir := t.TempDir()
 	port := freePort(t)
 	ntfy := newFakeNtfy(t)
-	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	base := fmt.Sprintf("http://localhost:%d", port) // passkeys need a host name, not an IP
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`base_url: %s
 listen_addr: 127.0.0.1:%d

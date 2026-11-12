@@ -4,20 +4,24 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
+
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
 
 // WebUI is the login + portal handler set.
 type WebUI struct {
-	store     *store.Store
-	cfg       *config.Config
-	sessions  *Sessions
-	pages     *view.Renderer
-	approvals Approvals
-	links     *pendingLinks
-	logger    *slog.Logger
+	store      *store.Store
+	cfg        *config.Config
+	sessions   *Sessions
+	pages      *view.Renderer
+	approvals  Approvals
+	links      *pendingLinks
+	webauthn   *webauthn.WebAuthn
+	ceremonies *ceremonies
+	logger     *slog.Logger
 }
 
 // New builds the web UI.
@@ -26,14 +30,20 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 	if logger == nil {
 		logger = slog.Default()
 	}
+	wa, err := newWebAuthn(cfg.BaseURL)
+	if err != nil {
+		logger.Warn("passkeys disabled", "error", err)
+	}
 	return &WebUI{
-		store:     st,
-		cfg:       cfg,
-		sessions:  NewSessions(signSecret, nil),
-		pages:     pages,
-		approvals: approvals,
-		links:     &pendingLinks{m: map[string]pendingLink{}},
-		logger:    logger,
+		webauthn:   wa,
+		ceremonies: &ceremonies{m: map[string]ceremony{}},
+		store:      st,
+		cfg:        cfg,
+		sessions:   NewSessions(signSecret, nil),
+		pages:      pages,
+		approvals:  approvals,
+		links:      &pendingLinks{m: map[string]pendingLink{}},
+		logger:     logger,
 	}
 }
 
@@ -63,6 +73,13 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /portal/notify", ui.handleNotifySave)
 	mux.HandleFunc("POST /portal/notify/delete", ui.handleNotifyDelete)
 	mux.HandleFunc("GET /portal/pending", ui.handlePendingIDs)
+	mux.HandleFunc("GET /settings", ui.handleSettings)
+	mux.HandleFunc("POST /settings/password", ui.handlePasswordChange)
+	mux.HandleFunc("POST /settings/passkeys/begin", ui.handlePasskeyBegin)
+	mux.HandleFunc("POST /settings/passkeys/finish", ui.handlePasskeyFinish)
+	mux.HandleFunc("POST /settings/passkeys/delete", ui.handlePasskeyDelete)
+	mux.HandleFunc("POST /login/passkey/begin", ui.handleLoginPasskeyBegin)
+	mux.HandleFunc("POST /login/passkey/finish", ui.handleLoginPasskeyFinish)
 }
 
 // Sessions exposes the session verifier for the OAuth authorize gate.

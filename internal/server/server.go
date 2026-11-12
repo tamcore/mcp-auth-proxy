@@ -85,7 +85,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
-	return accessLog(s.logger, mux)
+	return accessLog(s.logger, strictTransport(s.cfg.BaseURL, mux))
+}
+
+// strictTransport sends HSTS when the public origin is https, so browsers
+// stop using plain http (passkeys need a secure context).
+func strictTransport(baseURL string, next http.Handler) http.Handler {
+	if !strings.HasPrefix(baseURL, "https://") {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // OpsHandler serves the ops endpoints: /metrics, /healthz (process up) and

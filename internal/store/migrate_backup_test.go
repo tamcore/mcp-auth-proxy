@@ -40,13 +40,7 @@ func TestMigrateBacksUpAndReportsPendingMigrations(t *testing.T) {
 	if s.MigrationBackup() != path+".pre-v0002.bak" {
 		t.Fatalf("backup path: %q", s.MigrationBackup())
 	}
-	info, err := os.Stat(s.MigrationBackup())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := info.Mode().Perm(); mode != 0o600 {
-		t.Fatalf("backup mode %o, want 600 (it holds tokens)", mode)
-	}
+	assertOwnerOnly(t, s.MigrationBackup())
 	v3 := fstest.MapFS{mig1: v1[mig1], "0002_b.sql": v2["0002_b.sql"],
 		"0003_c.sql": {Data: []byte("CREATE TABLE c (z TEXT) STRICT;")}}
 	if err := os.WriteFile(path+".pre-v0003.bak", []byte("old snapshot"), 0o644); err != nil {
@@ -55,9 +49,7 @@ func TestMigrateBacksUpAndReportsPendingMigrations(t *testing.T) {
 	if err := s.Migrate(ctx, v3); err != nil {
 		t.Fatalf("an existing snapshot from a failed attempt must not block startup: %v", err)
 	}
-	if info, err = os.Stat(path + ".pre-v0003.bak"); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("an existing snapshot must be tightened to 600: %v", err)
-	}
+	assertOwnerOnly(t, path+".pre-v0003.bak")
 	bak, err := sql.Open("sqlite", "file:"+path+".pre-v0002.bak?mode=ro")
 	if err != nil {
 		t.Fatal(err)
@@ -67,5 +59,16 @@ func TestMigrateBacksUpAndReportsPendingMigrations(t *testing.T) {
 	q := `SELECT COUNT(*) FROM sqlite_master WHERE name IN ('a', 'b')`
 	if err := bak.QueryRowContext(ctx, q).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("backup must hold the pre-migration schema (only table a): n=%d err=%v", n, err)
+	}
+}
+
+func assertOwnerOnly(t *testing.T, path string) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("%s: mode %o, want 600 (it holds tokens)", filepath.Base(path), mode)
 	}
 }

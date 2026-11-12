@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	_ "modernc.org/sqlite" // pure-Go SQLite driver, CGO off
 
@@ -41,6 +42,25 @@ type Store struct {
 	path     string
 	migrated []string
 	snapshot string
+
+	refreshMu    sync.Mutex
+	refreshLocks map[string]*sync.Mutex
+}
+
+// TokenRefreshLock returns the lock that serializes refreshing one stored
+// upstream token. Every Upstream instance for the same upstream and user
+// shares it, so two of them never spend one rotating refresh token twice.
+func (s *Store) TokenRefreshLock(upstream, userID string) *sync.Mutex {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	if s.refreshLocks == nil {
+		s.refreshLocks = map[string]*sync.Mutex{}
+	}
+	k := upstream + "\x00" + userID
+	if s.refreshLocks[k] == nil {
+		s.refreshLocks[k] = &sync.Mutex{}
+	}
+	return s.refreshLocks[k]
 }
 
 // Open opens (and creates if needed) the database at path, applies pending

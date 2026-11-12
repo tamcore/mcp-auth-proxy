@@ -128,6 +128,10 @@ func (u *Upstream) transport() mcp.Transport {
 	return &mcp.CommandTransport{Command: cmd}
 }
 
+// maxResponseBytes caps one upstream JSON-RPC response (a tools/list or a
+// tools/call result), so a hostile upstream cannot exhaust memory.
+const maxResponseBytes = 16 << 20
+
 func (u *Upstream) httpClientWithAuth() *http.Client {
 	base := http.DefaultTransport
 	if u.httpc != nil {

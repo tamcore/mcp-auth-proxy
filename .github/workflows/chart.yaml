@@ -39,3 +39,14 @@ jobs:
             --set httpRoute.enabled=true --set 'httpRoute.parentRefs[0].name=gw' \
             --set httpRoute.httpsRedirect.enabled=true --set 'httpRoute.httpsRedirect.parentRefs[0].name=gw' \
             --set 'httpRoute.hostnames[0]=mcp.example' > /dev/null
+
+      - name: Config checksum ignores the chart version
+        run: |
+          set -euo pipefail
+          sum() {
+            helm package ./charts/mcp-auth-proxy --version "$1" --app-version "v$1" -d "$RUNNER_TEMP/$1" > /dev/null
+            helm template t "$RUNNER_TEMP/$1/mcp-auth-proxy-$1.tgz" \
+              --set config.baseURL=https://mcp.example --set 'config.users[0]=alice' | grep 'checksum/config'
+          }
+          a=$(sum 1.0.0); b=$(sum 2.0.0)
+          [ -n "$a" ] && [ "$a" = "$b" ] || { echo "checksum/config changes with the chart version: $a vs $b"; exit 1; }

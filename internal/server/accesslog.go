@@ -7,15 +7,20 @@ import (
 	"time"
 )
 
-// logPath returns the request path safe for logs: credential segments are
-// redacted and the query (signatures, OAuth codes) is dropped.
+// logPath returns the request path safe for logs: everything after the first
+// credential marker is redacted, also when a client embeds the resource path
+// in a well-known URL, and the query (signatures, OAuth codes) is dropped.
 func logPath(p string) string {
-	for _, prefix := range []string{"/mcp/", "/invite/"} {
-		if strings.HasPrefix(p, prefix) && len(p) > len(prefix) {
-			return prefix + "[redacted]"
+	cut, marker := -1, ""
+	for _, m := range []string{"/mcp/", "/invite/"} {
+		if i := strings.Index(p, m); i >= 0 && len(p) > i+len(m) && (cut < 0 || i < cut) {
+			cut, marker = i, m
 		}
 	}
-	return p
+	if cut < 0 {
+		return p
+	}
+	return p[:cut] + marker + "[redacted]"
 }
 
 type statusRecorder struct {

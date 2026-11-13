@@ -63,8 +63,8 @@ Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (databas
 | Metric | Labels | Meaning |
 |--------|--------|---------|
 | `mcp_proxy_tool_calls_total` | `user`, `key`, `upstream`, `tool`, `outcome` | proxied calls; outcome `success`, `tool_error` (the upstream answered with an error), `upstream_error`, `blocked` |
-| `mcp_proxy_tool_duration_seconds` | `upstream`, `tool` | latency of calls that reached the upstream |
-| `mcp_proxy_auth_events_total` | `user`, `key`, `result` | `auth` tool calls; result `granted`, `wrong_code`, `expired`, `exhausted`, `no_challenge` |
+| `mcp_proxy_tool_duration_seconds` | `upstream`, `tool` | latency of calls sent to the upstream (including transport errors), not of blocked calls |
+| `mcp_proxy_auth_events_total` | `user`, `key`, `result` | `auth` tool calls; result `granted`, `wrong_code`, `expired`, `exhausted`, `no_challenge`, `error` |
 | `mcp_proxy_challenges_total` | `user`, `key` | one-time-code challenges created |
 | `mcp_proxy_key_last_seen_timestamp_seconds` | `user`, `key` | last authenticated request |
 | `mcp_proxy_key_last_success_timestamp_seconds` | `user`, `key` | last successful tool call |

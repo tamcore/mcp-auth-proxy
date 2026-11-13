@@ -343,8 +343,10 @@ func (p *Proxy) callAuth(ctx context.Context, key *store.Key, otp string) (*mcp.
 		p.metrics.Auth(who, metrics.AuthGranted)
 		return textResult(gate.AuthorizedMessage(expiry)), nil
 	}
-	result := metrics.AuthNoChallenge
+	result := metrics.AuthError
 	switch {
+	case errors.Is(err, gate.ErrNoChallenge), errors.Is(err, gate.ErrNotPending):
+		result = metrics.AuthNoChallenge
 	case errors.Is(err, gate.ErrWrongCode):
 		result = metrics.AuthWrongCode
 	case errors.Is(err, gate.ErrExhausted):

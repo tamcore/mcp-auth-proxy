@@ -35,6 +35,7 @@ const (
 	AuthExpired     = "expired"
 	AuthExhausted   = "exhausted"
 	AuthNoChallenge = "no_challenge"
+	AuthError       = "error" // the gate failed, e.g. a database error
 )
 
 const (
@@ -152,9 +153,10 @@ func New(reg *prometheus.Registry, keys KeyStates, logger *slog.Logger) *Metrics
 // Registry returns the underlying registry.
 func (m *Metrics) Registry() *prometheus.Registry { return m.registry }
 
-// Handler serves /metrics.
+// Handler serves /metrics. A failed key-state read drops only those gauges
+// (and is logged), so the target never looks down because of one query.
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
 }
 
 // ToolCall counts one proxied tool call; took is observed only for calls that

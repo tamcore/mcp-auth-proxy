@@ -2,10 +2,16 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 )
@@ -56,5 +62,20 @@ func TestOwnerLookupFailureIsNotAnOwnerlessKey(t *testing.T) {
 	w := WhoOf(context.Background(), st, &store.Key{Label: "Mistral", UserID: &missing})
 	if w.User != unknownUser || w.Key != testKey {
 		t.Fatalf("who: %+v", w)
+	}
+}
+
+type brokenKeys struct{}
+
+func (brokenKeys) KeyStates(context.Context, time.Time) ([]store.KeyState, error) {
+	return nil, errors.New("database is locked")
+}
+
+func TestKeyStateErrorKeepsTheRestOfTheScrape(t *testing.T) {
+	m := New(nil, brokenKeys{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "go_goroutines") {
+		t.Fatalf("a key-state error must not take down /metrics: %d", rec.Code)
 	}
 }

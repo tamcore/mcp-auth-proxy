@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -89,7 +88,7 @@ func (c *keyCollector) emitTime(ch chan<- prometheus.Metric, d *prometheus.Desc,
 func mergeKeys(states []store.KeyState) map[Who]keyRow {
 	out := map[Who]keyRow{}
 	for _, s := range states {
-		w := Who{User: strings.ToLower(s.Username), Key: strings.ToLower(s.Label)}
+		w := Who{User: lowerClean(s.Username), Key: lowerClean(s.Label)}
 		r := out[w]
 		r.lastSeen = later(r.lastSeen, s.LastUsedAt)
 		r.lastSuccess = later(r.lastSuccess, s.LastSuccessAt)

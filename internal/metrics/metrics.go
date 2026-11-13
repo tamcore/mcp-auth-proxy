@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -43,7 +44,30 @@ const (
 	labelUpstream    = "upstream"
 	labelTool        = "tool"
 	scrapeTimeout    = 5 * time.Second
+
+	// maxLabelRunes cuts user-chosen label values (key labels, names) short.
+	maxLabelRunes = 64
+	// maxToolSeries caps distinct upstream/tool pairs: a user's own upstream
+	// could rename its tools endlessly. Further pairs count as tool "other".
+	maxToolSeries = 500
+	otherTool     = "other"
+	// unknownUser marks an owned key whose owner could not be read, so it is
+	// not mistaken for a key without an owner (user "").
+	unknownUser = "unknown"
 )
+
+// clean makes s a valid, bounded label value: Prometheus rejects invalid
+// UTF-8, and the collectors panic on it.
+func clean(s string) string {
+	s = strings.ToValidUTF8(s, "?")
+	if r := []rune(s); len(r) > maxLabelRunes {
+		s = string(r[:maxLabelRunes])
+	}
+	return s
+}
+
+// lowerClean is clean for the user and key labels, which are lowercase.
+func lowerClean(s string) string { return clean(strings.ToLower(strings.ToValidUTF8(s, "?"))) }
 
 // Who names the key behind an event: the owner's username and the key label,
 // both lowercase. User is "" for a key without an owner.
@@ -54,10 +78,11 @@ type Who struct {
 
 // WhoOf builds the labels for key; the owner's name is read from st.
 func WhoOf(ctx context.Context, st *store.Store, key *store.Key) Who {
-	w := Who{Key: strings.ToLower(key.Label)}
+	w := Who{Key: lowerClean(key.Label)}
 	if key.UserID != nil && st != nil {
+		w.User = unknownUser
 		if u, err := st.UserByID(ctx, *key.UserID); err == nil {
-			w.User = strings.ToLower(u.Username)
+			w.User = lowerClean(u.Username)
 		}
 	}
 	return w
@@ -70,6 +95,9 @@ type KeyStates interface {
 
 // Metrics is the registry-bound instrumentation set.
 type Metrics struct {
+	mu    sync.Mutex
+	tools map[string]bool // upstream/tool pairs that have their own series
+
 	registry     *prometheus.Registry
 	toolCalls    *prometheus.CounterVec
 	toolDuration *prometheus.HistogramVec
@@ -85,6 +113,7 @@ func New(reg *prometheus.Registry, keys KeyStates, logger *slog.Logger) *Metrics
 		reg = prometheus.NewRegistry()
 	}
 	m := &Metrics{
+		tools:    map[string]bool{},
 		registry: reg,
 		toolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: metricsNamespace, Name: "tool_calls_total",
@@ -131,10 +160,26 @@ func (m *Metrics) Handler() http.Handler {
 // ToolCall counts one proxied tool call; took is observed only for calls that
 // reached the upstream (took > 0).
 func (m *Metrics) ToolCall(w Who, upstream, tool, outcome string, took time.Duration) {
+	upstream, tool = clean(upstream), m.toolLabel(clean(upstream), clean(tool))
 	m.toolCalls.WithLabelValues(w.User, w.Key, upstream, tool, outcome).Inc()
 	if took > 0 {
 		m.toolDuration.WithLabelValues(upstream, tool).Observe(took.Seconds())
 	}
+}
+
+// toolLabel returns tool, or "other" once maxToolSeries pairs are in use.
+func (m *Metrics) toolLabel(upstream, tool string) string {
+	k := upstream + "\x00" + tool
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tools[k] {
+		return tool
+	}
+	if len(m.tools) >= maxToolSeries {
+		return otherTool
+	}
+	m.tools[k] = true
+	return tool
 }
 
 // Auth counts one auth tool call.

@@ -58,7 +58,7 @@ Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (databas
 
 ## Metrics
 
-`/metrics` carries the standard Go and process metrics, `mcp_proxy_build_info{version,commit}`, and per-key series. `user` is the key owner's username and `key` the key label, both lowercase; a key without an owner has `user=""`.
+`/metrics` carries the standard Go and process metrics, `mcp_proxy_build_info{version,commit}`, and per-key series. `user` is the key owner's username and `key` the key label, both lowercase; a key without an owner has `user=""`, and an owner that could not be read `user="unknown"`. Label values are cut at 64 characters, and invalid UTF-8 is replaced.
 
 | Metric | Labels | Meaning |
 |--------|--------|---------|
@@ -73,7 +73,7 @@ Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (databas
 | `mcp_proxy_key_authorized` | `user`, `key` | 1 while a session is live |
 | `mcp_proxy_key_auth_pending` | `user`, `key` | 1 while a one-time code is open |
 
-The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. Arguments, results, codes and tokens are never labels.
+The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. At most 500 distinct upstream/tool pairs get their own series; further ones count as `tool="other"`. Arguments, results, one-time codes and the proxy's tokens are never labels; key labels and names are whatever users and upstreams chose.
 
 ## Logs
 

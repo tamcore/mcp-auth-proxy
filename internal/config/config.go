@@ -278,6 +278,7 @@ func validateBaseURL(raw string) error {
 // validateUsers checks the users/admins lists and returns the user set.
 func validateUsers(users, admins []string) (map[string]bool, []error) {
 	userSet := map[string]bool{}
+	folded := map[string]bool{} // metrics label users in lowercase
 	var errs []error
 	for i, u := range users {
 		if u != strings.TrimSpace(u) {
@@ -287,10 +288,11 @@ func validateUsers(users, admins []string) (map[string]bool, []error) {
 			errs = append(errs, fmt.Errorf("config: users[%d] must not be empty", i))
 			continue
 		}
-		if userSet[u] {
-			errs = append(errs, fmt.Errorf("config: duplicate user %q", u))
+		if userSet[u] || folded[strings.ToLower(u)] {
+			errs = append(errs, fmt.Errorf("config: duplicate user %q (names are compared case-insensitively)", u))
 		}
 		userSet[u] = true
+		folded[strings.ToLower(u)] = true
 	}
 	for i, a := range admins {
 		if a != strings.TrimSpace(a) {

@@ -56,6 +56,25 @@ App listener (`listen_addr`): `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (pat
 
 Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (database reachable) only. Never expose it.
 
+## Metrics
+
+`/metrics` carries the standard Go and process metrics, `mcp_proxy_build_info{version,commit}`, and per-key series. `user` is the key owner's username and `key` the key label, both lowercase; a key without an owner has `user=""`.
+
+| Metric | Labels | Meaning |
+|--------|--------|---------|
+| `mcp_proxy_tool_calls_total` | `user`, `key`, `upstream`, `tool`, `outcome` | proxied calls; outcome `success`, `tool_error` (the upstream answered with an error), `upstream_error`, `blocked` |
+| `mcp_proxy_tool_duration_seconds` | `upstream`, `tool` | latency of calls that reached the upstream |
+| `mcp_proxy_auth_events_total` | `user`, `key`, `result` | `auth` tool calls; result `granted`, `wrong_code`, `expired`, `exhausted`, `no_challenge` |
+| `mcp_proxy_challenges_total` | `user`, `key` | one-time-code challenges created |
+| `mcp_proxy_key_last_seen_timestamp_seconds` | `user`, `key` | last authenticated request |
+| `mcp_proxy_key_last_success_timestamp_seconds` | `user`, `key` | last successful tool call |
+| `mcp_proxy_key_last_authorized_timestamp_seconds` | `user`, `key` | start of the current or last session |
+| `mcp_proxy_key_authorized_until_timestamp_seconds` | `user`, `key` | end of the current or last session |
+| `mcp_proxy_key_authorized` | `user`, `key` | 1 while a session is live |
+| `mcp_proxy_key_auth_pending` | `user`, `key` | 1 while a one-time code is open |
+
+The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. Arguments, results, codes and tokens are never labels.
+
 ## Logs
 
 `serve` logs JSON to stdout: one `http request` line per request (credential path segments redacted, no query string) and one `tool call` line per audit entry. Every other command logs to stderr.

@@ -30,7 +30,7 @@ Expect an acknowledgement within a few days and an assessment after that. Fixes 
 
 - Vulnerabilities in an upstream MCP server or in ntfy. Report those to their maintainers.
 - Findings that need an already-compromised host or a readable state directory.
-- An exposed ops listener (`/metrics`, `/healthz`, `/readyz`): it is documented as internal-only.
+- An exposed ops listener (`/metrics`, `/healthz`, `/readyz`): it is documented as internal-only. `/metrics` names usernames, key labels and tool names, never arguments, results, codes or tokens.
 - Results from automated scanners with no demonstrated impact.
 
 ## Supported versions

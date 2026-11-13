@@ -91,7 +91,7 @@ func TestOAuthUpstreamUsesKeyOwnersToken(t *testing.T) {
 		AuthorizeURL: "https://idp/authorize", TokenURL: "https://idp/token", ClientID: "c"}}}, st, nil, logger)
 	g := gate.New(gate.Options{Store: st, Digits: 5, Expiry: time.Minute, MaxAttempts: 3, DefaultTTL: time.Hour,
 		BaseURL: "http://p", SignSecret: []byte("0123456789abcdef0123456789abcdef"), Notifier: &fakeNotifier{}})
-	p := New(Options{Pool: pool, Store: st, Gate: g, Metrics: metrics.New(nil), Logger: logger})
+	p := New(Options{Pool: pool, Store: st, Gate: g, Metrics: metrics.New(nil, nil, nil), Logger: logger})
 
 	for _, uid := range []string{"u_a", "u_b"} {
 		if _, err := p.ServerFor(ctx, key(uid)); err != nil {

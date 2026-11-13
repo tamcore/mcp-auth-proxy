@@ -89,7 +89,8 @@ func newTestProxy(t *testing.T, upstreamURL string) (*Proxy, *fakeNotifier, *sto
 	})
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pool := upstream.NewPool([]config.UpstreamConfig{{Name: "echo", URL: upstreamURL}}, st, nil, logger)
-	proxy := New(Options{Pool: pool, Store: st, Gate: g, Metrics: metrics.New(nil), Logger: logger, AuditEnabled: true})
+	m := metrics.New(nil, nil, nil)
+	proxy := New(Options{Pool: pool, Store: st, Gate: g, Metrics: m, Logger: logger, AuditEnabled: true})
 	return proxy, ntf, key
 }
 
@@ -161,6 +162,7 @@ func TestProxyGateFlow(t *testing.T) {
 		t.Fatalf("retry after auth: %q (isErr=%v)", msg, isErr)
 	}
 	assertLastSuccess(t, proxy, key.ID)
+	assertGateFlowMetrics(t, proxy, key.Label)
 }
 
 func assertLastSuccess(t *testing.T, p *Proxy, keyID string) {

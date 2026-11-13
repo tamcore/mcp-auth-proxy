@@ -253,30 +253,36 @@ func (p *Proxy) audit(ctx context.Context, key *store.Key,
 func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 	upstreamName, toolName string, args json.RawMessage) (*mcp.CallToolResult, error) {
 	fullName := upstreamName + NamespaceSep + toolName
+	who := metrics.WhoOf(ctx, p.store, key)
 	if !p.gate.Check(ctx, key.ID) {
+		p.metrics.ToolCall(who, upstreamName, toolName, metrics.ToolBlocked, 0)
 		msg, err := p.gate.Block(ctx, key, fullName)
 		if err != nil {
 			p.logger.Error("gate block failed", "key", key.ID, "tool", fullName, "error", err)
-			p.metrics.ToolBlocked()
 			return errorResult("Blocked: authorization could not be started. Retry the call."), nil
 		}
-		p.metrics.ToolBlocked()
 		return errorResult(msg), nil
 	}
 	u, err := p.resolveUpstream(ctx, key, upstreamName)
 	if err != nil {
-		p.metrics.ToolUpstreamError()
+		p.metrics.ToolCall(who, upstreamName, toolName, metrics.ToolUpstreamError, 0)
 		msg := fmt.Sprintf("Tool %q failed: upstream %q is not configured.", fullName, upstreamName)
 		return errorResult(msg), nil
 	}
+	start := time.Now()
 	res, err := u.Call(ctx, toolName, args)
+	took := time.Since(start)
 	if err != nil {
 		// Sanitized: name the upstream and tool, never headers, URLs, or payloads.
 		p.logger.Error("upstream call failed", "upstream", upstreamName, "tool", toolName, "error", err)
-		p.metrics.ToolUpstreamError()
+		p.metrics.ToolCall(who, upstreamName, toolName, metrics.ToolUpstreamError, took)
 		return errorResult(fmt.Sprintf("Tool %q failed on upstream %q.", fullName, upstreamName)), nil
 	}
-	p.metrics.ToolAllowed()
+	outcome := metrics.ToolSuccess
+	if res.IsError {
+		outcome = metrics.ToolError
+	}
+	p.metrics.ToolCall(who, upstreamName, toolName, outcome, took)
 	p.audit(ctx, key, fullName, args, res)
 	if !res.IsError {
 		if err := p.store.MarkKeySuccess(ctx, key.ID, time.Now().UTC()); err != nil {
@@ -332,25 +338,22 @@ func (p *Proxy) addAuthTool(srv *mcp.Server, key *store.Key) {
 
 func (p *Proxy) callAuth(ctx context.Context, key *store.Key, otp string) (*mcp.CallToolResult, error) {
 	expiry, err := p.gate.Verify(ctx, key, otp)
+	who := metrics.WhoOf(ctx, p.store, key)
 	if err == nil {
-		p.metrics.ToolGranted()
-		p.metrics.AuthGranted()
+		p.metrics.Auth(who, metrics.AuthGranted)
 		return textResult(gate.AuthorizedMessage(expiry)), nil
 	}
-	msg := authFailureMessage(err)
+	result := metrics.AuthNoChallenge
 	switch {
 	case errors.Is(err, gate.ErrWrongCode):
-		p.metrics.ToolWrongCode()
-		p.metrics.AuthWrongCode()
+		result = metrics.AuthWrongCode
 	case errors.Is(err, gate.ErrExhausted):
-		p.metrics.ToolWrongCode()
-		p.metrics.AuthExhausted()
+		result = metrics.AuthExhausted
 	case errors.Is(err, gate.ErrExpired):
-		p.metrics.AuthExpired()
-	default:
-		p.metrics.AuthNoChallenge()
+		result = metrics.AuthExpired
 	}
-	return errorResult(msg), nil
+	p.metrics.Auth(who, result)
+	return errorResult(authFailureMessage(err)), nil
 }
 
 func authFailureMessage(err error) string {

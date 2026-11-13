@@ -37,7 +37,7 @@ internal/
   oauthserver/           client-facing OAuth AS + consent page
   upstream/              MCP client pool + OAuth linking/refresh
   server/                app mux (/mcp, /oauth, /approve, /deny, UI) + ops mux (/metrics, /healthz, /readyz)
-  metrics/               prometheus with a closed label vocabulary
+  metrics/               prometheus: Go/process collectors, per-user/key series, DB-backed key gauges
   notices/               THIRD_PARTY_NOTICES.md generator (curated licence registry)
   version/               build version/commit injected via ldflags
 migrations/              embedded SQL, forward-only

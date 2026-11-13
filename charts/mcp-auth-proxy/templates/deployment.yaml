@@ -17,7 +17,8 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        # Only the config data: chart version labels on the Secret must not restart the pod.
+        checksum/config: {{ include "mcp-auth-proxy.configYAML" . | sha256sum }}
         {{- if .Values.extraCACerts }}
         checksum/ca: {{ .Values.extraCACerts | sha256sum }}
         {{- end }}

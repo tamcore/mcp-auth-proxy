@@ -163,7 +163,6 @@ jobs:
             github.com/tamcore/mcp-auth-proxy/internal/webui
             github.com/tamcore/mcp-auth-proxy/internal/oauthserver
             github.com/tamcore/mcp-auth-proxy/internal/mcpserver
-            github.com/tamcore/mcp-auth-proxy/internal/gate
         run: |
           set -o pipefail
           awk -v floor="${COVERAGE_FLOOR}" -v except="${COVERAGE_EXCEPTIONS}" '

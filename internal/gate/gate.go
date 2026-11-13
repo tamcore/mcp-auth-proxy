@@ -56,7 +56,7 @@ type Gate struct {
 	codes   map[string]pendingCode
 
 	// OnChallenge fires once per newly created challenge (metrics hook).
-	OnChallenge func()
+	OnChallenge func(ctx context.Context, key *store.Key)
 }
 
 // Options configures a Gate.
@@ -136,7 +136,7 @@ func (g *Gate) Block(ctx context.Context, key *store.Key, toolName string) (stri
 		return "", err
 	}
 	if g.OnChallenge != nil {
-		g.OnChallenge()
+		g.OnChallenge(ctx, key)
 	}
 	pushFailed := false
 	if g.notifier != nil {
@@ -204,8 +204,11 @@ func (g *Gate) PendingCode(id string) (string, bool) {
 func (g *Gate) Verify(ctx context.Context, key *store.Key, otp string) (time.Time, error) {
 	now := g.now()
 	ch, err := g.store.PendingChallengeAny(ctx, key.ID)
-	if err != nil {
+	if errors.Is(err, store.ErrNotFound) {
 		return time.Time{}, ErrNoChallenge
+	}
+	if err != nil {
+		return time.Time{}, err
 	}
 	if !now.Before(ch.ExpiresAt) {
 		_ = g.store.ResolveChallenge(ctx, ch.ID, store.ChallengeExhausted)

@@ -56,6 +56,25 @@ App listener (`listen_addr`): `POST|GET /mcp` (Bearer auth), `/mcp/{token}` (pat
 
 Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (database reachable) only. Never expose it.
 
+## Metrics
+
+`/metrics` carries the standard Go and process metrics, `mcp_proxy_build_info{version,commit}`, and per-key series. `user` is the key owner's username and `key` the key label, both lowercase; a key without an owner has `user=""`, and an owner that could not be read `user="unknown"`. Label values are cut at 64 characters, and invalid UTF-8 is replaced.
+
+| Metric | Labels | Meaning |
+|--------|--------|---------|
+| `mcp_proxy_tool_calls_total` | `user`, `key`, `upstream`, `tool`, `outcome` | proxied calls; outcome `success`, `tool_error` (the upstream answered with an error), `upstream_error`, `blocked` |
+| `mcp_proxy_tool_duration_seconds` | `upstream`, `tool` | latency of calls sent to the upstream (including transport errors), not of blocked calls |
+| `mcp_proxy_auth_events_total` | `user`, `key`, `result` | `auth` tool calls; result `granted`, `wrong_code`, `expired`, `exhausted`, `no_challenge`, `error` |
+| `mcp_proxy_challenges_total` | `user`, `key` | one-time-code challenges created |
+| `mcp_proxy_key_last_seen_timestamp_seconds` | `user`, `key` | last authenticated request |
+| `mcp_proxy_key_last_success_timestamp_seconds` | `user`, `key` | last successful tool call |
+| `mcp_proxy_key_last_authorized_timestamp_seconds` | `user`, `key` | start of the current or last session |
+| `mcp_proxy_key_authorized_until_timestamp_seconds` | `user`, `key` | end of the current or last session |
+| `mcp_proxy_key_authorized` | `user`, `key` | 1 while a session is live |
+| `mcp_proxy_key_auth_pending` | `user`, `key` | 1 while a one-time code is open |
+
+The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. At most 500 distinct upstream/tool pairs get their own series; further ones count as `tool="other"`. Arguments, results, one-time codes and the proxy's tokens are never labels; key labels and names are whatever users and upstreams chose.
+
 ## Logs
 
 `serve` logs JSON to stdout: one `http request` line per request (credential path segments redacted, no query string) and one `tool call` line per audit entry. Every other command logs to stderr.

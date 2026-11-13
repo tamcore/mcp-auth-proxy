@@ -91,8 +91,8 @@ func runServe(cmd *cobra.Command) error {
 		BaseURL:       cfg.BaseURL,
 		SignSecret:    secret,
 	})
-	m := metrics.New(nil)
-	g.OnChallenge = m.Challenge
+	m := metrics.New(nil, st, logger)
+	g.OnChallenge = func(ctx context.Context, key *store.Key) { m.Challenge(metrics.WhoOf(ctx, st, key)) }
 	g.SetNotifier(ntfy.NewUserNotifier(st, httpClient, logger, g.ApproveURL, g.DenyURL))
 	pool := upstream.NewPool(cfg.Upstreams, st, httpClient, logger)
 	proxy := mcpserver.New(mcpserver.Options{

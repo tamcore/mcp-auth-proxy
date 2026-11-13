@@ -1,115 +1,191 @@
-// Package metrics holds the Prometheus instrumentation with a closed label
-// vocabulary. Every counter is pre-registered with its fixed label values, so
-// cardinality cannot grow at runtime.
+// Package metrics holds the Prometheus instrumentation. Labels are bounded by
+// configuration and the database: user names, key labels, upstream and tool
+// names, and fixed outcome words. Arguments, results, codes and tokens never
+// become a label.
 package metrics
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/version"
 )
 
-// Tool event results (closed vocabulary).
+// Tool call outcomes.
 const (
-	ToolBlocked       = "blocked"
-	ToolAllowed       = "allowed"
+	ToolSuccess       = "success"
+	ToolError         = "tool_error" // the upstream answered with an error result
 	ToolUpstreamError = "upstream_error"
-	ToolWrongCode     = "wrong_code"
-	ToolGranted       = "granted"
+	ToolBlocked       = "blocked"
 )
 
-// Auth event results (closed vocabulary).
+// Auth tool results.
 const (
-	AuthGranted    = "granted"
-	AuthWrongCode  = "wrong_code"
-	AuthExpired    = "expired"
-	AuthExhausted  = "exhausted"
-	AuthNoChalleng = "no_challenge"
+	AuthGranted     = "granted"
+	AuthWrongCode   = "wrong_code"
+	AuthExpired     = "expired"
+	AuthExhausted   = "exhausted"
+	AuthNoChallenge = "no_challenge"
+	AuthError       = "error" // the gate failed, e.g. a database error
 )
 
-// metricsNamespace is the Prometheus namespace for all collectors.
-const metricsNamespace = "mcp_proxy"
+const (
+	metricsNamespace = "mcp_proxy"
+	labelUser        = "user"
+	labelKey         = "key"
+	labelUpstream    = "upstream"
+	labelTool        = "tool"
+	scrapeTimeout    = 5 * time.Second
+
+	// maxLabelRunes cuts user-chosen label values (key labels, names) short.
+	maxLabelRunes = 64
+	// maxToolSeries caps distinct upstream/tool pairs: a user's own upstream
+	// could rename its tools endlessly. Further pairs count as tool "other".
+	maxToolSeries = 500
+	otherTool     = "other"
+	// unknownUser marks an owned key whose owner could not be read, so it is
+	// not mistaken for a key without an owner (user "").
+	unknownUser = "unknown"
+)
+
+// clean makes s a valid, bounded label value: Prometheus rejects invalid
+// UTF-8, and the collectors panic on it.
+func clean(s string) string {
+	s = strings.ToValidUTF8(s, "?")
+	if r := []rune(s); len(r) > maxLabelRunes {
+		s = string(r[:maxLabelRunes])
+	}
+	return s
+}
+
+// lowerClean is clean for the user and key labels, which are lowercase.
+func lowerClean(s string) string { return clean(strings.ToLower(strings.ToValidUTF8(s, "?"))) }
+
+// Who names the key behind an event: the owner's username and the key label,
+// both lowercase. User is "" for a key without an owner.
+type Who struct {
+	User string
+	Key  string
+}
+
+// WhoOf builds the labels for key; the owner's name is read from st.
+func WhoOf(ctx context.Context, st *store.Store, key *store.Key) Who {
+	w := Who{Key: lowerClean(key.Label)}
+	if key.UserID != nil && st != nil {
+		w.User = unknownUser
+		if u, err := st.UserByID(ctx, *key.UserID); err == nil {
+			w.User = lowerClean(u.Username)
+		}
+	}
+	return w
+}
+
+// KeyStates is the database view the key gauges are read from at scrape time.
+type KeyStates interface {
+	KeyStates(ctx context.Context, now time.Time) ([]store.KeyState, error)
+}
 
 // Metrics is the registry-bound instrumentation set.
 type Metrics struct {
-	registry *prometheus.Registry
-	tool     *prometheus.CounterVec
-	auth     *prometheus.CounterVec
-	challeng prometheus.Counter
+	mu    sync.Mutex
+	tools map[string]bool // upstream/tool pairs that have their own series
+
+	registry     *prometheus.Registry
+	toolCalls    *prometheus.CounterVec
+	toolDuration *prometheus.HistogramVec
+	auth         *prometheus.CounterVec
+	challenges   *prometheus.CounterVec
 }
 
-// New registers all collectors on reg (or a fresh registry when reg is nil) and
-// pre-creates every label combination.
-func New(reg *prometheus.Registry) *Metrics {
+// New registers the Go and process collectors, build_info, the event metrics,
+// and, when keys is not nil, the per-key state gauges on reg (or a fresh
+// registry when reg is nil).
+func New(reg *prometheus.Registry, keys KeyStates, logger *slog.Logger) *Metrics {
 	if reg == nil {
 		reg = prometheus.NewRegistry()
 	}
 	m := &Metrics{
+		tools:    map[string]bool{},
 		registry: reg,
-		tool: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: metricsNamespace,
-			Name:      "tool_events_total",
-			Help:      "Tool call outcomes: blocked, allowed, upstream_error, wrong_code, granted.",
-		}, []string{"result"}),
+		toolCalls: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metricsNamespace, Name: "tool_calls_total",
+			Help: "Proxied tool calls by user, key, upstream, tool and outcome (success, tool_error, upstream_error, blocked).",
+		}, []string{labelUser, labelKey, labelUpstream, labelTool, "outcome"}),
+		toolDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: metricsNamespace, Name: "tool_duration_seconds",
+			Help:    "Latency of proxied tool calls that reached the upstream.",
+			Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60},
+		}, []string{labelUpstream, labelTool}),
 		auth: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: metricsNamespace,
-			Name:      "auth_events_total",
-			Help:      "Auth tool outcomes.",
-		}, []string{"result"}),
-		challeng: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: metricsNamespace,
-			Name:      "challenges_total",
-			Help:      "One-time-code challenges created.",
-		}),
+			Namespace: metricsNamespace, Name: "auth_events_total",
+			Help: "Auth tool calls by user, key and result.",
+		}, []string{labelUser, labelKey, "result"}),
+		challenges: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metricsNamespace, Name: "challenges_total",
+			Help: "One-time-code challenges created, by user and key.",
+		}, []string{labelUser, labelKey}),
 	}
-	for _, r := range []string{ToolBlocked, ToolAllowed, ToolUpstreamError, ToolWrongCode, ToolGranted} {
-		m.tool.WithLabelValues(r)
+	buildInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: metricsNamespace, Name: "build_info",
+		Help: "Always 1, labelled with the build identity.",
+	}, []string{"version", "commit"})
+	buildInfo.WithLabelValues(version.Version, version.Commit).Set(1)
+	reg.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		buildInfo, m.toolCalls, m.toolDuration, m.auth, m.challenges,
+	)
+	if keys != nil {
+		reg.MustRegister(newKeyCollector(keys, logger))
 	}
-	for _, r := range []string{AuthGranted, AuthWrongCode, AuthExpired, AuthExhausted, AuthNoChalleng} {
-		m.auth.WithLabelValues(r)
-	}
-	reg.MustRegister(m.tool, m.auth, m.challeng)
 	return m
 }
 
 // Registry returns the underlying registry.
 func (m *Metrics) Registry() *prometheus.Registry { return m.registry }
 
-// Handler serves /metrics.
+// Handler serves /metrics. A failed key-state read drops only those gauges
+// (and is logged), so the target never looks down because of one query.
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError})
 }
 
-// ToolBlocked counts a blocked tool call.
-func (m *Metrics) ToolBlocked() { m.tool.WithLabelValues(ToolBlocked).Inc() }
+// ToolCall counts one proxied tool call; took is observed only for calls that
+// reached the upstream (took > 0).
+func (m *Metrics) ToolCall(w Who, upstream, tool, outcome string, took time.Duration) {
+	upstream, tool = clean(upstream), m.toolLabel(clean(upstream), clean(tool))
+	m.toolCalls.WithLabelValues(w.User, w.Key, upstream, tool, outcome).Inc()
+	if took > 0 {
+		m.toolDuration.WithLabelValues(upstream, tool).Observe(took.Seconds())
+	}
+}
 
-// ToolAllowed counts a proxied call that ran.
-func (m *Metrics) ToolAllowed() { m.tool.WithLabelValues(ToolAllowed).Inc() }
+// toolLabel returns tool, or "other" once maxToolSeries pairs are in use.
+func (m *Metrics) toolLabel(upstream, tool string) string {
+	k := upstream + "\x00" + tool
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tools[k] {
+		return tool
+	}
+	if len(m.tools) >= maxToolSeries {
+		return otherTool
+	}
+	m.tools[k] = true
+	return tool
+}
 
-// ToolUpstreamError counts a failed upstream call.
-func (m *Metrics) ToolUpstreamError() { m.tool.WithLabelValues(ToolUpstreamError).Inc() }
+// Auth counts one auth tool call.
+func (m *Metrics) Auth(w Who, result string) { m.auth.WithLabelValues(w.User, w.Key, result).Inc() }
 
-// ToolWrongCode counts an auth tool call with a wrong code.
-func (m *Metrics) ToolWrongCode() { m.tool.WithLabelValues(ToolWrongCode).Inc() }
-
-// ToolGranted counts an auth tool call that granted a session.
-func (m *Metrics) ToolGranted() { m.tool.WithLabelValues(ToolGranted).Inc() }
-
-// AuthGranted counts a granted session.
-func (m *Metrics) AuthGranted() { m.auth.WithLabelValues(AuthGranted).Inc() }
-
-// AuthWrongCode counts a wrong code attempt.
-func (m *Metrics) AuthWrongCode() { m.auth.WithLabelValues(AuthWrongCode).Inc() }
-
-// AuthExpired counts an expired challenge.
-func (m *Metrics) AuthExpired() { m.auth.WithLabelValues(AuthExpired).Inc() }
-
-// AuthExhausted counts a challenge that ran out of attempts.
-func (m *Metrics) AuthExhausted() { m.auth.WithLabelValues(AuthExhausted).Inc() }
-
-// AuthNoChallenge counts a verify with no pending challenge.
-func (m *Metrics) AuthNoChallenge() { m.auth.WithLabelValues(AuthNoChalleng).Inc() }
-
-// Challenge counts a newly created challenge. Wired to Gate.OnChallenge.
-func (m *Metrics) Challenge() { m.challeng.Inc() }
+// Challenge counts a newly created challenge.
+func (m *Metrics) Challenge(w Who) { m.challenges.WithLabelValues(w.User, w.Key).Inc() }

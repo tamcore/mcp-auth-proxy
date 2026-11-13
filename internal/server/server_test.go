@@ -60,8 +60,8 @@ func newTestSrvLogged(t *testing.T, logger *slog.Logger) *Server {
 		RenotifyFloor: 30 * time.Second, DefaultTTL: 8 * time.Hour,
 		BaseURL: cfg.BaseURL, SignSecret: secret,
 	})
-	m := metrics.New(nil)
-	g.OnChallenge = m.Challenge
+	m := metrics.New(nil, st, logger)
+	g.OnChallenge = func(ctx context.Context, key *store.Key) { m.Challenge(metrics.WhoOf(ctx, st, key)) }
 	pool := upstream.NewPool(cfg.Upstreams, st, nil, nil)
 	proxy := mcpserver.New(mcpserver.Options{Pool: pool, Store: st, Gate: g, Metrics: m, AuditEnabled: true})
 	srv, err := New(ctx, cfg, st, g, proxy, m, secret, logger)

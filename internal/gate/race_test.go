@@ -68,3 +68,11 @@ func TestConcurrentApproveAndDenyResolveOnce(t *testing.T) {
 		t.Fatalf("%d approve/deny calls succeeded on one challenge, want exactly 1", n)
 	}
 }
+
+func TestVerifyReportsADatabaseErrorAsSuch(t *testing.T) {
+	e := newTestEnv(t)
+	_ = e.st.Close()
+	if _, err := e.gate.Verify(context.Background(), e.key, "12345"); err == nil || errors.Is(err, ErrNoChallenge) {
+		t.Fatalf("a database failure must not read as 'no challenge': %v", err)
+	}
+}

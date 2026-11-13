@@ -149,6 +149,12 @@ upstreams: [{name: e, command: [x]}]
 oauth:
   clients: [{client_id: c, name: C, redirect_uris: [https://c/cb], confidential: true}]
 `,
+		"users differing only in case": `
+base_url: http://x
+state_dir: ./data
+users: [philipp, Philipp]
+upstreams: [{name: e, command: [x]}]
+`,
 		"bad otp digits": `
 base_url: http://x
 state_dir: ./data

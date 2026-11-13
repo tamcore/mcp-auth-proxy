@@ -204,8 +204,11 @@ func (g *Gate) PendingCode(id string) (string, bool) {
 func (g *Gate) Verify(ctx context.Context, key *store.Key, otp string) (time.Time, error) {
 	now := g.now()
 	ch, err := g.store.PendingChallengeAny(ctx, key.ID)
-	if err != nil {
+	if errors.Is(err, store.ErrNotFound) {
 		return time.Time{}, ErrNoChallenge
+	}
+	if err != nil {
+		return time.Time{}, err
 	}
 	if !now.Before(ch.ExpiresAt) {
 		_ = g.store.ResolveChallenge(ctx, ch.ID, store.ChallengeExhausted)

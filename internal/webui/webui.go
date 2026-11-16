@@ -65,6 +65,7 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /portal/key", ui.handleCreateKey)
 	mux.HandleFunc("POST /portal/key/revoke", ui.handleRevokeKey)
 	mux.HandleFunc("POST /portal/key/upstreams", ui.handleKeyUpstreams)
+	mux.HandleFunc("POST /portal/key/ttl", ui.handleKeyTTL)
 	mux.HandleFunc("POST /portal/key/delete", ui.handleDeleteKey)
 	mux.HandleFunc("POST /portal/key/end-session", ui.handleEndKeySession)
 	mux.HandleFunc("POST /portal/upstream", ui.handleAddUpstream)

@@ -14,6 +14,7 @@ const (
 	toolsTimeout  = 20 * time.Second
 	errorField    = "error"
 	nameField     = "name"
+	labelField    = "label"
 	upstreamField = "upstream"
 )
 

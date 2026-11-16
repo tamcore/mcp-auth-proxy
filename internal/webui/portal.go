@@ -95,11 +95,16 @@ func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unreadable form", http.StatusBadRequest)
 		return
 	}
-	label := strings.TrimSpace(r.PostForm.Get("label"))
+	label := strings.TrimSpace(r.PostForm.Get(labelField))
 	if label == "" {
 		label = user.Username + " client"
 	}
 	names, err := ui.validateChosenUpstreams(r.Context(), user, r.PostForm[upstreamField])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ttl, err := parseKeyTTL(r.PostForm.Get("ttl"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -118,7 +123,7 @@ func (ui *WebUI) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		Label:      label,
 		SecretHash: store.HashSecret(token),
 		Upstreams:  names,
-		TTLSeconds: int64(ui.cfg.SessionTTL / time.Second),
+		TTLSeconds: ttl,
 		CreatedAt:  time.Now().UTC(),
 		UserID:     &user.ID,
 	}

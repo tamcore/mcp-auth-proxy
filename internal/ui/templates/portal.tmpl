@@ -66,7 +66,7 @@
             <code class="muted font-mono text-xs">{{.ID}} · {{.Kind}}</code>
             {{range .Upstreams}}<span class="badge">{{.}}</span>{{end}}
           </div>
-          <p class="muted mt-1 text-xs" data-testid="key-activity">Last seen {{when .LastUsed}} · last success {{when .LastSuccess}}{{if not .Revoked}} · {{with .AuthorizedUntil}}authorized until {{when .}}{{else}}not authorized{{end}}{{end}}</p>
+          <p class="muted mt-1 text-xs" data-testid="key-activity">Last seen {{when .LastUsed}} · last success {{when .LastSuccess}}{{if not .Revoked}} · {{with .AuthorizedUntil}}authorized until {{when .}}{{else}}not authorized{{end}}{{end}} · session {{.SessionTTL}}{{if not .CustomTTL}} (default){{end}}</p>
           {{if and (not .Revoked) .AuthorizedUntil}}
           <form method="post" action="/portal/key/end-session" class="mt-1">
             <input type="hidden" name="id" value="{{.ID}}">
@@ -87,6 +87,17 @@
                 {{end}}
               </div>
               <button type="submit" class="btn-ghost">Save servers</button>
+            </form>
+          </details>
+          <details class="mt-2">
+            <summary class="cursor-pointer text-sm text-teal-700 dark:text-teal-300">Edit session TTL</summary>
+            <form method="post" action="/portal/key/ttl" class="mt-2 flex flex-wrap items-end gap-2">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <div>
+                <label class="field-label" for="ttl-{{.ID}}">Session TTL <span class="muted">(1m to 168h; empty uses the default; applies from the next authorization)</span></label>
+                <input class="field" id="ttl-{{.ID}}" type="text" name="ttl" value="{{.CustomTTL}}" placeholder="{{$.Data.DefaultTTL}}" pattern="[0-9hms. ]*" maxlength="16">
+              </div>
+              <button type="submit" class="btn-ghost">Save TTL</button>
             </form>
           </details>
           {{end}}
@@ -113,6 +124,10 @@
       <div>
         <label class="field-label" for="label">Label</label>
         <input class="field" id="label" type="text" name="label" maxlength="80" placeholder="e.g. Claude on my laptop">
+      </div>
+      <div>
+        <label class="field-label" for="ttl">Session TTL <span class="muted">(optional, 1m to 168h, e.g. 4h or 90m)</span></label>
+        <input class="field" id="ttl" type="text" name="ttl" placeholder="{{.DefaultTTL}}" pattern="[0-9hms. ]*" maxlength="16">
       </div>
       <fieldset>
         <legend class="field-label">MCP servers</legend>

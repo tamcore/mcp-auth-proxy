@@ -102,6 +102,11 @@ type AdminData struct {
 	Invite string
 	Error  string
 	Users  []*store.User
+	// Activity is keyed by user ID; a missing user has no activity.
+	Activity map[string]store.ActivityStat
+	Total    store.ActivityStat
+	// Retention bounds the tool-call counts; empty when the audit log is off.
+	Retention string
 }
 
 // ConsentData feeds consent.tmpl.

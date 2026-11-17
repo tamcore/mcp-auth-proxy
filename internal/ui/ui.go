@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -81,6 +82,18 @@ func New(logger *slog.Logger) *Renderer {
 			return string([]rune(name)[:1])
 		},
 		"navItems": navItems,
+		"toolCallsLabel": func(retention string) string {
+			if retention == "" {
+				return "Tool calls"
+			}
+			return "Tool calls (last " + retention + ")"
+		},
+		"toolCalls": func(retention string, n int) string {
+			if retention == "" {
+				return "audit off"
+			}
+			return strconv.Itoa(n)
+		},
 		"when": func(t *time.Time) string {
 			if t == nil {
 				return "never"

@@ -57,16 +57,13 @@ func runServe(cmd *cobra.Command) error {
 		return err
 	}
 	logger := newServeLogger()
-	st, err := openStore(ctx, cfg)
+	st, err := openState(ctx, cfg, logger, openStore)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = st.Close() }()
 	for _, m := range st.MigrationsApplied() {
 		logger.Info("migration applied", "migration", m, "backup", st.MigrationBackup())
-	}
-	if err := restrictStateDir(cfg.StateDir, logger); err != nil {
-		return err
 	}
 	secret, err := store.EnsureSignSecret(cfg.StateDir)
 	if err != nil {
@@ -119,9 +116,22 @@ func runServe(cmd *cobra.Command) error {
 	return serveUntilDone(ctx, logger, shutdownGrace, app, ops)
 }
 
-// restrictStateDir tightens the state dir to 0700. A volume root this process
-// does not own (Kubernetes fsGroup) cannot be changed; its files stay 0600.
+// openState secures the state dir before anything in it is opened or created.
+func openState(ctx context.Context, cfg *config.Config, logger *slog.Logger,
+	open func(context.Context, *config.Config) (*store.Store, error)) (*store.Store, error) {
+	if err := restrictStateDir(cfg.StateDir, logger); err != nil {
+		return nil, err
+	}
+	return open(ctx, cfg)
+}
+
+// restrictStateDir creates or tightens the state dir to 0700. A volume root
+// this process does not own (Kubernetes fsGroup) cannot be changed; its files
+// stay 0600.
 func restrictStateDir(dir string, logger *slog.Logger) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
 	fi, err := os.Stat(dir)
 	if err != nil {
 		return err

@@ -21,6 +21,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/server"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	"github.com/tamcore/mcp-auth-proxy/internal/upstream"
+	"github.com/tamcore/mcp-auth-proxy/internal/webpush"
 )
 
 func newServeCmd() *cobra.Command {
@@ -93,7 +94,12 @@ func runServe(cmd *cobra.Command) error {
 	})
 	m := metrics.New(nil, st, logger)
 	g.OnChallenge = func(ctx context.Context, key *store.Key) { m.Challenge(metrics.WhoOf(ctx, st, key)) }
-	g.SetNotifier(ntfy.NewUserNotifier(st, httpClient, logger, g.ApproveURL, g.DenyURL))
+	pushKeys, err := webpush.EnsureKeys(cfg.StateDir)
+	if err != nil {
+		return err
+	}
+	devices := webpush.New(st, httpClient, pushKeys, cfg.BaseURL, logger)
+	g.SetNotifier(ntfy.NewUserNotifier(st, httpClient, logger, g.ApproveURL, g.DenyURL).WithDevices(devices))
 	pool := upstream.NewPool(cfg.Upstreams, st, httpClient, logger)
 	proxy := mcpserver.New(mcpserver.Options{
 		Pool: pool, Store: st, Gate: g, Metrics: m, Logger: logger,
@@ -103,6 +109,7 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	srv.SetDevices(devices)
 	app := newHTTPServer(cfg.ListenAddr, srv.Handler())
 	ops := newHTTPServer(cfg.OpsListenAddr, srv.OpsHandler())
 	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)

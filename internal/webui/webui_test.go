@@ -36,6 +36,13 @@ func newTestUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *htt
 // newTestUIGate also returns the gate that backs the portal's pending card.
 func newTestUIGate(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server, *gate.Gate) {
 	t.Helper()
+	st, ts, g, _ := newTestWebUI(t, mutate...)
+	return st, ts, g
+}
+
+// newTestWebUI also returns the WebUI for setting optional dependencies.
+func newTestWebUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *httptest.Server, *gate.Gate, *WebUI) {
+	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
 	st, err := store.Open(ctx, filepath.Join(dir, "proxy.db"))
@@ -70,7 +77,7 @@ func newTestUIGate(t *testing.T, mutate ...func(*config.Config)) (*store.Store, 
 	ui.Register(mux)
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
-	return st, ts, g
+	return st, ts, g, ui
 }
 
 func seedUser(t *testing.T, st *store.Store, name, pw string) *store.User {

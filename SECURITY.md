@@ -47,12 +47,13 @@ All state is under `state_dir`:
 |----------|----------|------|
 | `proxy.db` (+ `-wal`, `-shm`) | SQLite database, see below | `0600` |
 | `sign.secret` | HMAC key for approve/deny links and web sessions | `0600` |
+| `vapid.json` | VAPID key pair that signs Web Push messages | `0600` |
 | `proxy.db.pre-v<N>.bak` | Snapshot taken before a schema migration | as `proxy.db` |
 
 The database stores:
 
 - **Hashes only:** keys, client-facing OAuth access tokens, invite tokens, and one-time codes as SHA-256 hex; passwords as bcrypt. A stolen database yields none of them.
-- **Plaintext, because the proxy must present them:** upstream OAuth access and refresh tokens, per-user upstream headers (for example a bearer token), and per-user ntfy tokens. Protect the database and its backups accordingly.
+- **Plaintext, because the proxy must present them:** upstream OAuth access and refresh tokens, per-user upstream headers (for example a bearer token), per-user ntfy tokens, and Web Push subscriptions (endpoint and the device's encryption keys). Protect the database and its backups accordingly.
 - **No secret:** passkey public keys and sign counts, users, and upstream definitions.
 - **Whatever clients send:** audit entries store the full tool arguments (and, with `audit.log_responses`, the results) in the database and the service log. If a client passes a secret as a tool argument, it lands there. Disable `audit.enabled` if that is not acceptable.
 

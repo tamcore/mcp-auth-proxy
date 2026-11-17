@@ -7,6 +7,7 @@ package notices
 const digestGoAuthors = "15a7908f982fda5955ff467804801d374cc8a340a5c274e7da7e3a01c2bd059d"
 
 var licenceDigests = map[string]string{
+	"github.com/SherClockHolmes/webpush-go":  "b127d4bb8cb0a6fa33b2ee968461e90dcaf67068900cf91062be97180c29c8dd",
 	"github.com/beorn7/perks":                "3a818f9c62694af8fd94f479c8d14d6ac3cb93137c1728baeddce07c669124fc",
 	"github.com/cespare/xxhash/v2":           "3c5df56941e231d48272b87bdb4a61f8c4bc151583449b708d11c70581de6857",
 	"github.com/dustin/go-humanize":          "ed46783c68b4ce73bdb049b2f5e1a2cc2387c4fbf70f82b27acd98772aacf7e5",

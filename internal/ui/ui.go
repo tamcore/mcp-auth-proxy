@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//go:embed assets/app.css assets/app.js templates/*.tmpl
+//go:embed assets/app.css assets/app.js assets/sw.js assets/manifest.json assets/*.png templates/*.tmpl
 var files embed.FS
 
 // User is the logged-in user shown in the top bar.
@@ -60,7 +60,8 @@ func New(logger *slog.Logger) *Renderer {
 	}
 	r := &Renderer{pages: map[string]*template.Template{}, assets: map[string]asset{}, logger: logger}
 	versions := map[string]string{}
-	for _, name := range []string{"app.css", "app.js"} {
+	names := []string{"app.css", "app.js", "sw.js", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"}
+	for _, name := range names {
 		body, err := files.ReadFile("assets/" + name)
 		if err != nil {
 			panic(err)
@@ -150,6 +151,32 @@ func (r *Renderer) Static() http.Handler {
 		}
 		w.Header().Set("Content-Type", a.ctype)
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
+	})
+}
+
+// ServiceWorker serves sw.js from the site root, so its scope covers every
+// page. It is revalidated on each load so updates reach browsers.
+func (r *Renderer) ServiceWorker() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		a := r.assets["sw.js"]
+		w.Header().Set("Content-Type", a.ctype)
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
+	})
+}
+
+// TouchIcon serves the app icon at the fixed root paths iOS probes when it
+// adds a site to the Home Screen; it ignores <link rel="apple-touch-icon">.
+func (r *Renderer) TouchIcon() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		a := r.assets["icon-180.png"]
+		sum := sha256.Sum256(a.body)
+		w.Header().Set("Content-Type", a.ctype)
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", `"`+hex.EncodeToString(sum[:8])+`"`)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
 	})

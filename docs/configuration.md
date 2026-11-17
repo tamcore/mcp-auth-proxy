@@ -7,7 +7,7 @@
 | `base_url` | `http://127.0.0.1:8080` | canonical public URL (button URLs, MCP URL, passkey RP ID) |
 | `listen_addr` | `127.0.0.1:8080` | HTTP listen address |
 | `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
-| `state_dir` | `./data` | holds `proxy.db` and `sign.secret` |
+| `state_dir` | `./data` | holds `proxy.db`, `sign.secret` and `vapid.json` |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
 | `users` / `admins` | – | user names; the admin role is set only here |

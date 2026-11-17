@@ -72,6 +72,70 @@
     }
   };
 
+  const deviceName = () => {
+    const ua = navigator.userAgent;
+    const browser = [["Edg/", "Edge"], ["Firefox/", "Firefox"], ["Chrome/", "Chrome"], ["Safari/", "Safari"]]
+      .find(([m]) => ua.includes(m))?.[1] || "Browser";
+    const os = [["Android", "Android"], ["iPhone", "iPhone"], ["iPad", "iPad"], ["Mac OS", "macOS"], ["Windows", "Windows"], ["Linux", "Linux"]]
+      .find(([m]) => ua.includes(m))?.[1];
+    return os ? `${browser} on ${os}` : browser;
+  };
+
+  // A fresh subscription each time, so a rotated server key never lingers.
+  const enablePush = async (key) => {
+    const status = document.querySelector("[data-push-status]");
+    const say = (msg) => {
+      if (status) status.textContent = msg;
+    };
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      say("This browser does not offer push notifications. On iPhone and iPad, add this site to the Home Screen first: Share, then Add to Home Screen.");
+      return;
+    }
+    if ((await Notification.requestPermission()) !== "granted") {
+      say("Notifications are blocked for this site. Allow them in the browser settings.");
+      return;
+    }
+    say("Sending a test push…");
+    await navigator.serviceWorker.register("/sw.js");
+    const reg = await navigator.serviceWorker.ready;
+    const old = await reg.pushManager.getSubscription();
+    if (old) await old.unsubscribe();
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64.dec(key) });
+    const { endpoint, keys } = sub.toJSON();
+    await postJSON("/portal/push/subscribe", JSON.stringify({ endpoint, keys, label: deviceName() }));
+    location.reload();
+  };
+
+  let installPrompt;
+  const showAll = (sel, on) => document.querySelectorAll(sel).forEach((el) => (el.hidden = !on));
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    showAll("[data-install]", true);
+  });
+  window.addEventListener("appinstalled", () => showAll("[data-install]", false));
+  // iOS has no install prompt; Web Push there needs the Home Screen app.
+  // Installed app only: the browser tab keeps zoom for accessibility.
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone) {
+    document.addEventListener("gesturestart", (e) => e.preventDefault());
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelector('meta[name="viewport"]')?.setAttribute("content",
+        "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no");
+    });
+  }
+  const iosHint = () => {
+    const ios = /iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+    showAll("[data-install-ios]", ios && !navigator.standalone && !("PushManager" in window));
+  };
+  const install = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    showAll("[data-install]", false);
+  };
+
   const addPasskey = async () => {
     const { publicKey } = await postJSON("/settings/passkeys/begin");
     publicKey.challenge = b64.dec(publicKey.challenge);
@@ -158,6 +222,7 @@
   document.addEventListener("DOMContentLoaded", checkPasskeys);
   document.addEventListener("DOMContentLoaded", watchPending);
   document.addEventListener("DOMContentLoaded", apply);
+  document.addEventListener("DOMContentLoaded", iosHint);
   document.addEventListener("click", (e) => {
     const set = e.target.closest("[data-theme-set]");
     if (set) {
@@ -175,6 +240,18 @@
     const login = e.target.closest("[data-passkey-login]");
     if (login) {
       loginWithPasskey(login.dataset.passkeyLogin).catch((err) => showError(err.message));
+      return;
+    }
+    const push = e.target.closest("[data-push-enable]");
+    if (push) {
+      enablePush(push.dataset.pushEnable).catch((err) => {
+        const status = document.querySelector("[data-push-status]");
+        if (status) status.textContent = `Push not enabled: ${err.message}`;
+      });
+      return;
+    }
+    if (e.target.closest("[data-install]")) {
+      install();
       return;
     }
     const tools = e.target.closest("[data-tools]");

@@ -15,19 +15,34 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/webpush"
 )
 
 // ErrNoTarget means the key's owner has not configured a push target.
 var ErrNoTarget = errors.New("ntfy: no push target configured")
 
-// UserNotifier pushes a challenge to the push target of the key's owner.
-// Keys without an owner (created via the CLI) fall back to the log.
+// DevicePusher delivers a challenge to a user's Web Push subscriptions and
+// returns how many devices it reached.
+type DevicePusher interface {
+	Push(ctx context.Context, userID string, p webpush.Payload) (int, error)
+}
+
+// UserNotifier pushes a challenge to the push target of the key's owner and
+// to their subscribed devices. Keys without an owner (created via the CLI)
+// fall back to the log.
 type UserNotifier struct {
 	store     *store.Store
 	client    *http.Client
 	logger    *slog.Logger
+	devices   DevicePusher
 	approveFn func(id string) string
 	denyFn    func(id string) string
+}
+
+// WithDevices also pushes every challenge to the owner's subscribed devices.
+func (n *UserNotifier) WithDevices(d DevicePusher) *UserNotifier {
+	n.devices = d
+	return n
 }
 
 // NewUserNotifier builds the gate notifier. approveFn/denyFn produce the
@@ -51,8 +66,12 @@ func (n *UserNotifier) Notify(ctx context.Context, ch *store.Challenge, keyLabel
 	if key.UserID == nil {
 		return NewLogPublisher(n.logger).Publish(ctx, m)
 	}
+	reached := n.pushDevices(ctx, *key.UserID, ch.ID, m)
 	target, err := n.store.GetUserNotify(ctx, *key.UserID)
 	if errors.Is(err, store.ErrNotFound) {
+		if reached > 0 {
+			return nil
+		}
 		n.logger.Info("no push target configured; code only in the portal", "user_id", *key.UserID, "key", key.ID)
 		return ErrNoTarget
 	}
@@ -61,6 +80,20 @@ func (n *UserNotifier) Notify(ctx context.Context, ch *store.Challenge, keyLabel
 	}
 	m.Topic = target.Topic
 	return NewHTTPPublisher(target.URL, target.Token, n.client, n.logger).Publish(ctx, m)
+}
+
+// pushDevices sends m to the user's devices; failures are logged, since ntfy
+// and the portal still carry the code.
+func (n *UserNotifier) pushDevices(ctx context.Context, userID, challengeID string, m Message) int {
+	if n.devices == nil {
+		return 0
+	}
+	reached, err := n.devices.Push(ctx, userID, webpush.Payload{Title: m.Title, Body: m.Message,
+		Approve: n.approveFn(challengeID), Deny: n.denyFn(challengeID)})
+	if err != nil {
+		n.logger.Warn("web push failed", "user_id", userID, "reached", reached, "error", err)
+	}
+	return reached
 }
 
 func challengeMessage(ch *store.Challenge, keyLabel string, approveFn, denyFn func(string) string) Message {

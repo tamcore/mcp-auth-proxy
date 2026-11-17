@@ -278,3 +278,33 @@ func TestHSTSOnlyForHTTPSBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceWorkerServedFromRoot(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") ||
+		resp.Header.Get("Cache-Control") != "no-cache" || !strings.Contains(string(body), "notificationclick") {
+		t.Fatalf("sw.js: %d %v", resp.StatusCode, resp.Header)
+	}
+}
+
+func TestTouchIconServedAtRootPaths(t *testing.T) {
+	ts := newTestServer(t)
+	for _, p := range []string{"/apple-touch-icon.png", "/apple-touch-icon-240x240-precomposed.png", "/favicon.ico"} {
+		resp, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" ||
+			!bytes.HasPrefix(body, []byte("\x89PNG")) {
+			t.Fatalf("%s: %d %v", p, resp.StatusCode, resp.Header)
+		}
+	}
+}

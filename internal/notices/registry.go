@@ -92,13 +92,14 @@ var moduleNotices = map[string]moduleNotice{
 	"golang.org/x/oauth2":                 licenseOnly(spdxBSD3),
 	"modernc.org/mathutil":                licenseOnly(spdxBSD3),
 
-	"github.com/fxamacker/cbor/v2":    licenseOnly(spdxMIT),
-	"github.com/go-webauthn/webauthn": licenseOnly(spdxBSD3),
-	"github.com/go-webauthn/x":        licenseOnly(spdxBSD3),
-	"github.com/golang-jwt/jwt/v5":    licenseOnly(spdxMIT),
-	"github.com/google/go-tpm":        licenseOnly(spdxApache2),
-	"github.com/sourcegraph/conc":     licenseOnly(spdxMIT),
-	"github.com/x448/float16":         licenseOnly(spdxMIT),
+	"github.com/fxamacker/cbor/v2":          licenseOnly(spdxMIT),
+	"github.com/SherClockHolmes/webpush-go": licenseOnly(spdxMIT),
+	"github.com/go-webauthn/webauthn":       licenseOnly(spdxBSD3),
+	"github.com/go-webauthn/x":              licenseOnly(spdxBSD3),
+	"github.com/golang-jwt/jwt/v5":          licenseOnly(spdxMIT),
+	"github.com/google/go-tpm":              licenseOnly(spdxApache2),
+	"github.com/sourcegraph/conc":           licenseOnly(spdxMIT),
+	"github.com/x448/float16":               licenseOnly(spdxMIT),
 
 	"github.com/philhofer/fwd": {SPDX: spdxMIT, Files: []string{"LICENSE.md"}},
 

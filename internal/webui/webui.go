@@ -25,6 +25,9 @@ type WebUI struct {
 	logins     *loginLimiter
 	logger     *slog.Logger
 
+	// Devices sends Web Push; nil hides device subscriptions.
+	Devices Devices
+
 	// OnUpstreamsChanged runs after a user added or deleted an own upstream.
 	OnUpstreamsChanged func(userID string)
 }
@@ -82,6 +85,8 @@ func (ui *WebUI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /portal/upstream/tools", ui.handleUpstreamTools)
 	mux.HandleFunc("POST /portal/notify", ui.handleNotifySave)
 	mux.HandleFunc("POST /portal/notify/delete", ui.handleNotifyDelete)
+	mux.HandleFunc("POST /portal/push/subscribe", ui.handlePushSubscribe)
+	mux.HandleFunc("POST /portal/push/delete", ui.handlePushDelete)
 	mux.HandleFunc("GET /portal/pending", ui.handlePendingIDs)
 	mux.HandleFunc("GET /settings", ui.handleSettings)
 	mux.HandleFunc("POST /settings/password", ui.handlePasswordChange)

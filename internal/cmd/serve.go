@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -113,7 +114,7 @@ func runServe(cmd *cobra.Command) error {
 	app := newHTTPServer(cfg.ListenAddr, srv.Handler())
 	ops := newHTTPServer(cfg.OpsListenAddr, srv.OpsHandler())
 	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)
-	return serveUntilDone(ctx, logger, app, ops)
+	return serveUntilDone(ctx, logger, shutdownGrace, app, ops)
 }
 
 // newHTTPServer bounds how long a client may take to send a request and keep
@@ -128,9 +129,11 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 	}
 }
 
+const shutdownGrace = 5 * time.Second
+
 // serveUntilDone runs the servers until ctx ends or one of them fails, then
-// shuts all of them down.
-func serveUntilDone(ctx context.Context, logger *slog.Logger, srvs ...*http.Server) error {
+// shuts all of them down within grace.
+func serveUntilDone(ctx context.Context, logger *slog.Logger, grace time.Duration, srvs ...*http.Server) error {
 	errCh := make(chan error, len(srvs))
 	for _, s := range srvs {
 		go func() {
@@ -146,11 +149,15 @@ func serveUntilDone(ctx context.Context, logger *slog.Logger, srvs ...*http.Serv
 		pending--
 		errs = append(errs, err)
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	for _, s := range srvs {
-		errs = append(errs, s.Shutdown(shutdownCtx))
+	shutdownErrs := make([]error, len(srvs))
+	var wg sync.WaitGroup
+	for i, s := range srvs {
+		wg.Go(func() { shutdownErrs[i] = s.Shutdown(shutdownCtx) })
 	}
+	wg.Wait()
+	errs = append(errs, shutdownErrs...)
 	for range pending {
 		errs = append(errs, <-errCh)
 	}

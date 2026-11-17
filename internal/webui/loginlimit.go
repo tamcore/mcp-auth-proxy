@@ -8,12 +8,27 @@ import (
 const (
 	maxFailedLogins = 5
 	loginLockout    = time.Minute
+	// maxTrackedLogins bounds the limiter: every attempted name gets an entry,
+	// known or not, so the response does not reveal which names exist.
+	maxTrackedLogins = 10000
+	// maxPasswordChecks caps concurrent bcrypt comparisons in login.
+	maxPasswordChecks = 4
+	// maxLimiterKey caps the bytes of a name kept as a limiter key.
+	maxLimiterKey = 64
 )
 
+// limiterKey truncates a name; configured usernames are far shorter.
+func limiterKey(username string) string {
+	if len(username) > maxLimiterKey {
+		return username[:maxLimiterKey]
+	}
+	return username
+}
+
 // loginLimiter locks a username for a minute after maxFailedLogins failures in
-// a row; every further failure locks it again. Only known users are tracked,
-// so the map is bounded by the user count.
-// ponytail: per username only; a password spray across many users is slowed by bcrypt alone.
+// a row; every further failure locks it again.
+// ponytail: a full map evicts the oldest entry, so ~10k fresh names unlock a
+// name early; the bcrypt slots make that take minutes.
 type loginLimiter struct {
 	mu     sync.Mutex
 	failed map[string]failedLogins
@@ -32,21 +47,44 @@ func newLoginLimiter(now func() time.Time) *loginLimiter {
 	return &loginLimiter{failed: map[string]failedLogins{}, now: now}
 }
 
-func (l *loginLimiter) allowed(username string) bool {
+// attempt reserves one try for username and counts it as a failure until
+// reset; false means the name is locked. Check and reservation share one
+// lock, so concurrent tries cannot overrun the limit.
+func (l *loginLimiter) attempt(username string) bool {
+	username = limiterKey(username)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	f := l.failed[username]
-	return f.count < maxFailedLogins || l.now().Sub(f.last) >= loginLockout
+	now := l.now()
+	f, tracked := l.failed[username]
+	if f.count >= maxFailedLogins && now.Sub(f.last) < loginLockout {
+		return false
+	}
+	if !tracked && len(l.failed) >= maxTrackedLogins {
+		l.evict(now)
+	}
+	l.failed[username] = failedLogins{count: f.count + 1, last: now}
+	return true
 }
 
-func (l *loginLimiter) fail(username string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	f := l.failed[username]
-	l.failed[username] = failedLogins{count: f.count + 1, last: l.now()}
+// evict drops expired entries, or the oldest one if none expired.
+func (l *loginLimiter) evict(now time.Time) {
+	oldest, first := "", true
+	for name, f := range l.failed {
+		if now.Sub(f.last) >= loginLockout {
+			delete(l.failed, name)
+			continue
+		}
+		if first || f.last.Before(l.failed[oldest].last) {
+			oldest, first = name, false
+		}
+	}
+	if len(l.failed) >= maxTrackedLogins {
+		delete(l.failed, oldest)
+	}
 }
 
 func (l *loginLimiter) reset(username string) {
+	username = limiterKey(username)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.failed, username)

@@ -2,9 +2,11 @@ package webui
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,6 +68,59 @@ func TestRepeatedFailedLoginsLockTheUser(t *testing.T) {
 	}
 }
 
+func TestUnknownAndRealUsernamesFailAlike(t *testing.T) {
+	st, ts := newTestUI(t)
+	seedUser(t, st, testAlice, "pw")
+	sequence := func(user string) string {
+		codes := make([]string, 0, maxFailedLogins+1)
+		for range maxFailedLogins + 1 {
+			resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, pwField: {"wrong"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			codes = append(codes, fmt.Sprint(resp.StatusCode))
+		}
+		return strings.Join(codes, ",")
+	}
+	want := sequence(testAlice)
+	for _, name := range []string{"ghost", "ghost2"} {
+		if got := sequence(name); got != want {
+			t.Fatalf("%s: %s, real user: %s; the responses reveal which names exist", name, got, want)
+		}
+	}
+}
+
+func TestConcurrentWrongLoginsStayWithinTheLimit(t *testing.T) {
+	st, ts := newTestUI(t)
+	seedUser(t, st, testAlice, "pw")
+	const tries = 20
+	codes := make(chan int, tries)
+	var wg sync.WaitGroup
+	for range tries {
+		wg.Go(func() {
+			resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {testAlice}, pwField: {"wrong"}})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_ = resp.Body.Close()
+			codes <- resp.StatusCode
+		})
+	}
+	wg.Wait()
+	close(codes)
+	passed := 0
+	for c := range codes {
+		if c != http.StatusTooManyRequests {
+			passed++
+		}
+	}
+	if passed > maxFailedLogins {
+		t.Fatalf("%d concurrent wrong passwords were checked, limit is %d", passed, maxFailedLogins)
+	}
+}
+
 // failSessionCutoff makes every write of users.sessions_since fail.
 func failSessionCutoff(t *testing.T, st *store.Store) {
 	t.Helper()
@@ -96,7 +151,7 @@ func TestPasswordChangeIsAtomic(t *testing.T) {
 	st, ts := newLinkUI(t, "https://idp/token")
 	cookie := login(t, ts, testBob, linkPw)
 	failSessionCutoff(t, st)
-	form := url.Values{"current": {linkPw}, pwField: {newPw}, pw2Field: {newPw}}
+	form := url.Values{currentField: {linkPw}, pwField: {newPw}, pw2Field: {newPw}}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/settings/password", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)

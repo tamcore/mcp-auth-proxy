@@ -1,13 +1,16 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func settingsBody(t *testing.T, ts *httptest.Server, cookie *http.Cookie) (int, string) {
@@ -52,7 +55,7 @@ func TestChangePassword(t *testing.T) {
 	old := login(t, ts, testBob, linkPw)
 	other := login(t, ts, testBob, linkPw)
 	change := func(cur, pw, pw2 string) *http.Response {
-		form := url.Values{"current": {cur}, pwField: {pw}, pw2Field: {pw2}}
+		form := url.Values{currentField: {cur}, pwField: {pw}, pw2Field: {pw2}}
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/settings/password", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.AddCookie(old)
@@ -143,5 +146,69 @@ func TestPasskeyCeremonyEndpoints(t *testing.T) {
 	resp, err = noRedirectClient().Post(ts.URL+"/login/passkey/finish", "application/json", strings.NewReader(`{}`))
 	if err != nil || resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("bogus assertion: want 401, got %v %v", resp, err)
+	}
+}
+
+func TestPasswordChangeUsesTheBcryptCap(t *testing.T) {
+	st, ts, _, ui := newTestWebUI(t)
+	seedUser(t, st, testAlice, "pw")
+	cookie := login(t, ts, testAlice, "pw")
+	for range cap(ui.passwordChecks) {
+		ui.passwordChecks <- struct{}{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	form := url.Values{currentField: {"pw"}, pwField: {newPw}, pw2Field: {newPw}}
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/settings/password", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	ui.handlePasswordChange(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("all bcrypt slots busy: want 503, got %d", rec.Code)
+	}
+}
+
+func TestInviteChecksTheTokenBeforeHashing(t *testing.T) {
+	st, _, _, ui := newTestWebUI(t)
+	u := seedUser(t, st, testBob, "pw")
+	token, err := st.CreateInvite(context.Background(), u.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range cap(ui.passwordChecks) {
+		ui.passwordChecks <- struct{}{}
+	}
+	set := func(tok string) int {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		form := url.Values{pwField: {newPw}, pw2Field: {newPw}}
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/invite/"+tok, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("token", tok)
+		rec := httptest.NewRecorder()
+		ui.handleInviteSet(rec, req)
+		return rec.Code
+	}
+	if code := set("bogus"); code != http.StatusNotFound {
+		t.Fatalf("unknown token must be refused before hashing: want 404, got %d", code)
+	}
+	if code := set(token); code != http.StatusServiceUnavailable {
+		t.Fatalf("hashing must take a bcrypt slot: want 503, got %d", code)
+	}
+}
+
+func TestLoginLogsAShortenedName(t *testing.T) {
+	_, ts, _, ui := newTestWebUI(t)
+	var buf strings.Builder
+	ui.logger = slog.New(slog.NewTextHandler(&buf, nil))
+	form := url.Values{userField: {strings.Repeat("x", 5000)}, pwField: {"x"}}
+	resp, err := noRedirectClient().PostForm(ts.URL+"/login", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if strings.Contains(buf.String(), strings.Repeat("x", maxLimiterKey+1)) {
+		t.Fatal("a failed login must not log the full attempted name")
 	}
 }

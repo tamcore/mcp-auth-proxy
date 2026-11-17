@@ -12,7 +12,7 @@
 | `egress_restrict` | `false` | SSRF guard for users' own upstreams, ntfy servers and Web Push endpoints. Off by default, because users are trusted; turn it on when they are not. |
 | `egress_allow` | `[]` | with `egress_restrict`, destinations that users' own upstreams, ntfy servers and Web Push endpoints may reach although they are not public. An entry is a CIDR prefix (`192.168.1.0/24`) or an exact host name (`ntfy.example.com`); a listed host name skips the address check whatever it resolves to, so it keeps working when its IP changes. With `egress_restrict`, all other such destinations must resolve to public addresses (checked after DNS, on every connection, redirects included). Upstreams in this file are not restricted. |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
-| `users` / `admins` | – | user names; the admin role is set only here |
+| `users` / `admins` | – | user names (at most 64 bytes, unique case-insensitively); the admin role is set only here |
 | `audit.enabled` / `log_responses` / `retention` | `true` / `false` / `720h` | per-user audit log of tool calls |
 | `upstreams[]` | – | `name` + exactly one of `url` / `command`, optional `users`, `headers`, `oauth` |
 | `oauth.token_ttl` | `24h` | `map_` access token lifetime (no refresh tokens in v1) |

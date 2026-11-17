@@ -47,8 +47,28 @@ func TestToolNamesFromOneUpstreamAreCapped(t *testing.T) {
 			}
 		}
 	}
-	if len(tools) > maxToolSeries+1 || !tools[otherTool] {
+	if len(tools) > maxToolSeries+1 || !tools[otherLabel] {
 		t.Fatalf("an upstream that keeps renaming tools must not grow the series without bound: %d tools", len(tools))
+	}
+}
+
+func TestUpstreamNamesAreCapped(t *testing.T) {
+	m := New(nil, nil, nil)
+	for i := range maxToolSeries + 50 {
+		m.ToolCall(Who{User: testUser, Key: testKey}, fmt.Sprintf("own_%d", i), "tool", ToolSuccess, 1)
+	}
+	for _, name := range []string{"mcp_proxy_tool_calls_total", "mcp_proxy_tool_duration_seconds"} {
+		upstreams := map[string]bool{}
+		for _, mt := range family(t, m, name).GetMetric() {
+			for _, lp := range mt.GetLabel() {
+				if lp.GetName() == labelUpstream {
+					upstreams[lp.GetValue()] = true
+				}
+			}
+		}
+		if len(upstreams) > maxToolSeries+1 || !upstreams[otherLabel] {
+			t.Fatalf("%s: new upstream names must not grow the series without bound: %d upstreams", name, len(upstreams))
+		}
 	}
 }
 

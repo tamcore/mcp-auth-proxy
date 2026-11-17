@@ -73,7 +73,7 @@ Ops listener (`ops_listen_addr`): `/metrics`, `/healthz`, and `/readyz` (databas
 | `mcp_proxy_key_authorized` | `user`, `key` | 1 while a session is live |
 | `mcp_proxy_key_auth_pending` | `user`, `key` | 1 while a one-time code is open |
 
-The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. At most 500 distinct upstream/tool pairs get their own series; further ones count as `tool="other"`. Arguments, results, one-time codes and the proxy's tokens are never labels; key labels and names are whatever users and upstreams chose.
+The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they are right after a restart; revoked keys are not reported, and a timestamp that never happened is left out. Keys of one user with the same label share their series. At most 500 distinct upstream/tool pairs get their own series; further ones count as `upstream="other"`, `tool="other"`, so neither renamed tools nor new upstream names grow the series without bound. Arguments, results, one-time codes and the proxy's tokens are never labels; key labels and names are whatever users and upstreams chose.
 
 ## Logs
 

@@ -29,7 +29,9 @@ type WebUI struct {
 	webauthn   *webauthn.WebAuthn
 	ceremonies *ceremonies
 	logins     *loginLimiter
-	logger     *slog.Logger
+	// passwordChecks holds a token per running bcrypt comparison.
+	passwordChecks chan struct{}
+	logger         *slog.Logger
 	// egress dials user-controlled destinations: own upstreams, ntfy.
 	egress *http.Client
 	ntfy   *http.Client
@@ -56,17 +58,18 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 	sessions := NewSessions(signSecret, nil)
 	sessions.secure = secure
 	return &WebUI{
-		webauthn:   wa,
-		ceremonies: &ceremonies{m: map[string]ceremony{}, secure: secure},
-		logins:     newLoginLimiter(nil),
-		store:      st,
-		cfg:        cfg,
-		sessions:   sessions,
-		pages:      pages,
-		approvals:  approvals,
-		links:      &pendingLinks{m: map[string]pendingLink{}},
-		logger:     logger,
-		egress:     guard.Client(0),
+		webauthn:       wa,
+		ceremonies:     &ceremonies{m: map[string]ceremony{}, secure: secure},
+		logins:         newLoginLimiter(nil),
+		passwordChecks: make(chan struct{}, maxPasswordChecks),
+		store:          st,
+		cfg:            cfg,
+		sessions:       sessions,
+		pages:          pages,
+		approvals:      approvals,
+		links:          &pendingLinks{m: map[string]pendingLink{}},
+		logger:         logger,
+		egress:         guard.Client(0),
 		ntfy: &http.Client{Transport: guard.Transport(), Timeout: ntfyTimeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}

@@ -308,3 +308,16 @@ func TestTouchIconServedAtRootPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestOversizedFormBodyIsRefused(t *testing.T) {
+	ts := newTestServer(t)
+	body := "username=" + strings.Repeat("a", maxFormBytes+1) + "&password=x"
+	resp, err := http.Post(ts.URL+"/login", "application/x-www-form-urlencoded", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("oversized form: want 400, got %d", resp.StatusCode)
+	}
+}

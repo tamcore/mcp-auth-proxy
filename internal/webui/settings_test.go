@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func settingsBody(t *testing.T, ts *httptest.Server, cookie *http.Cookie) (int, string) {
@@ -52,7 +54,7 @@ func TestChangePassword(t *testing.T) {
 	old := login(t, ts, testBob, linkPw)
 	other := login(t, ts, testBob, linkPw)
 	change := func(cur, pw, pw2 string) *http.Response {
-		form := url.Values{"current": {cur}, pwField: {pw}, pw2Field: {pw2}}
+		form := url.Values{currentField: {cur}, pwField: {pw}, pw2Field: {pw2}}
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/settings/password", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.AddCookie(old)
@@ -143,5 +145,25 @@ func TestPasskeyCeremonyEndpoints(t *testing.T) {
 	resp, err = noRedirectClient().Post(ts.URL+"/login/passkey/finish", "application/json", strings.NewReader(`{}`))
 	if err != nil || resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("bogus assertion: want 401, got %v %v", resp, err)
+	}
+}
+
+func TestPasswordChangeUsesTheBcryptCap(t *testing.T) {
+	st, ts, _, ui := newTestWebUI(t)
+	seedUser(t, st, testAlice, "pw")
+	cookie := login(t, ts, testAlice, "pw")
+	for range cap(ui.passwordChecks) {
+		ui.passwordChecks <- struct{}{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	form := url.Values{currentField: {"pw"}, pwField: {newPw}, pw2Field: {newPw}}
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/settings/password", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	ui.handlePasswordChange(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("all bcrypt slots busy: want 503, got %d", rec.Code)
 	}
 }

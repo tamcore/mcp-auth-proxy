@@ -16,6 +16,7 @@ import (
 
 const (
 	pw2Field      = "password2"
+	currentField  = "current"
 	disabledField = "disabled"
 )
 

@@ -3,6 +3,7 @@ package webui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,5 +34,15 @@ func TestPasswordChecksWaitForAFreeSlot(t *testing.T) {
 	defer cancel()
 	if _, checked := ui.checkPassword(ctx, "", "pw"); checked {
 		t.Fatal("a password was checked although every slot was busy")
+	}
+}
+
+func TestLoginLimiterKeysAreBounded(t *testing.T) {
+	l := newLoginLimiter(nil)
+	l.attempt(strings.Repeat("x", 10000))
+	for k := range l.failed {
+		if len(k) > maxLimiterKey {
+			t.Fatalf("limiter key of %d bytes kept", len(k))
+		}
 	}
 }

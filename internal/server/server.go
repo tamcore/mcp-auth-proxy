@@ -79,6 +79,19 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 // SetDevices enables Web Push device subscriptions in the portal.
 func (s *Server) SetDevices(d webui.Devices) { s.webui.Devices = d }
 
+// maxFormBytes caps request bodies outside /mcp (forms, passkey and push JSON).
+const maxFormBytes = 1 << 20
+
+// limitBody caps non-MCP request bodies; MCP calls carry tool arguments.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/mcp" && !strings.HasPrefix(r.URL.Path, "/mcp/") {
+			r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Handler returns the root mux.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -97,7 +110,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)
 	mux.HandleFunc("/approve/{id}", allowCrossOrigin(s.handleApprove))
 	mux.HandleFunc("/deny/{id}", allowCrossOrigin(s.handleDeny))
-	return accessLog(s.logger, strictTransport(s.cfg.BaseURL, securityHeaders(crossOriginProtection().Handler(mux))))
+	return accessLog(s.logger, strictTransport(s.cfg.BaseURL,
+		securityHeaders(crossOriginProtection().Handler(limitBody(mux)))))
 }
 
 // crossOriginProtection rejects cross-site browser POSTs (CSRF) everywhere

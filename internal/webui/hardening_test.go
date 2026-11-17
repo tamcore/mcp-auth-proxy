@@ -151,7 +151,7 @@ func TestPasswordChangeIsAtomic(t *testing.T) {
 	st, ts := newLinkUI(t, "https://idp/token")
 	cookie := login(t, ts, testBob, linkPw)
 	failSessionCutoff(t, st)
-	form := url.Values{"current": {linkPw}, pwField: {newPw}, pw2Field: {newPw}}
+	form := url.Values{currentField: {linkPw}, pwField: {newPw}, pw2Field: {newPw}}
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/settings/password", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(cookie)

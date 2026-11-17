@@ -13,7 +13,17 @@ const (
 	maxTrackedLogins = 10000
 	// maxPasswordChecks caps concurrent bcrypt comparisons in login.
 	maxPasswordChecks = 4
+	// maxLimiterKey caps the bytes of a name kept as a limiter key.
+	maxLimiterKey = 256
 )
+
+// limiterKey truncates a name; configured usernames are far shorter.
+func limiterKey(username string) string {
+	if len(username) > maxLimiterKey {
+		return username[:maxLimiterKey]
+	}
+	return username
+}
 
 // loginLimiter locks a username for a minute after maxFailedLogins failures in
 // a row; every further failure locks it again.
@@ -41,6 +51,7 @@ func newLoginLimiter(now func() time.Time) *loginLimiter {
 // reset; false means the name is locked. Check and reservation share one
 // lock, so concurrent tries cannot overrun the limit.
 func (l *loginLimiter) attempt(username string) bool {
+	username = limiterKey(username)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -73,6 +84,7 @@ func (l *loginLimiter) evict(now time.Time) {
 }
 
 func (l *loginLimiter) reset(username string) {
+	username = limiterKey(username)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.failed, username)

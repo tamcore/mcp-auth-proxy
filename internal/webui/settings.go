@@ -70,8 +70,12 @@ func (ui *WebUI) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pw := r.PostForm.Get("password")
+	current, checked := ui.checkPassword(r.Context(), user.PasswordHash, r.PostForm.Get("current"))
 	switch {
-	case !store.CheckPassword(user.PasswordHash, r.PostForm.Get("current")):
+	case !checked:
+		http.Error(w, "busy, try again", http.StatusServiceUnavailable)
+		return
+	case !current:
 		ui.logger.Warn("password change: wrong current password", "user", user.Username, "remote", r.RemoteAddr)
 		ui.renderSettings(w, r, user, http.StatusBadRequest, "The current password is wrong.", "")
 		return

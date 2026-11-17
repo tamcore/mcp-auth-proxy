@@ -10,7 +10,7 @@ Admins (`/admin`) can temporarily disable users (their keys stop working immedia
 
 At `{base_url}/login` a user logs in with username and password, or with a passkey, and reaches a self-contained portal (same-origin CSS and JS only, no external assets; light, dark, or auto theme, auto follows the system and is the default) to:
 
-- create API keys for the globally configured MCP servers available to them, and change a key's servers later; each key shows when it was last seen and last succeeded;
+- create API keys for the globally configured MCP servers available to them, and change a key's servers later; optionally set a per-key session TTL (1m to 168h, empty follows `session_ttl`; a change applies from the next authorization); each key shows when it was last seen and last succeeded;
 - run the OAuth flow for registered clients;
 - add their **own** MCP servers (stored in the database, visible only to them); a URL server must answer MCP `initialize` and `tools/list` when it is added, so the proxy never talks to other URLs on a user's behalf;
 - link their own account at an OAuth upstream ("Link my account");
@@ -40,7 +40,7 @@ Under **Settings** (`/settings`) users change their password (all their other br
 
    > Session authorized until 2025-01-01T20:00:00Z. Retry the tool call you were blocked on.
 
-5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h, per-key override).
+5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h; per-key override in the portal or with `key create --ttl`).
 
 Instead of the code you can tap **Approve** in the notification; the button URL is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is a 403. Opening the URL in a browser (GET) only shows a confirmation button; only the POST acts, so link previews cannot approve.
 

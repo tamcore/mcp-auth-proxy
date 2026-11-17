@@ -127,6 +127,19 @@ func (s *Store) UpdateKeyUpstreams(ctx context.Context, id, userID string, upstr
 	return nil
 }
 
+// UpdateKeyTTL sets the session TTL of a key the user owns; 0 follows session_ttl.
+func (s *Store) UpdateKeyTTL(ctx context.Context, id, userID string, ttlSeconds int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE keys SET ttl_seconds = ? WHERE id = ? AND user_id = ?`,
+		ttlSeconds, id, userID)
+	if err != nil {
+		return fmt.Errorf("store: update key ttl: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // MarkKeyUsed records an authenticated request with the key.
 func (s *Store) MarkKeyUsed(ctx context.Context, id string, at time.Time) error {
 	return s.setKeyTime(ctx, "last_used_at", id, at)

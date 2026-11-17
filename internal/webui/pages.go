@@ -2,6 +2,7 @@ package webui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
@@ -37,11 +38,17 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 	for _, u := range own {
 		d.Servers = append(d.Servers, view.Server{Name: u.Name, Kind: "own", Source: source(u.URL, u.Command), ID: u.ID})
 	}
+	d.DefaultTTL = formatTTL(cfg.SessionTTL)
 	for _, k := range keys {
-		d.Keys = append(d.Keys, view.Key{
+		v := view.Key{
 			ID: k.ID, Label: k.Label, Kind: k.Kind, Upstreams: k.Upstreams, Revoked: k.Revoked(),
-			LastUsed: k.LastUsedAt, LastSuccess: k.LastSuccessAt,
-		})
+			LastUsed: k.LastUsedAt, LastSuccess: k.LastSuccessAt, SessionTTL: formatTTL(cfg.SessionTTL),
+		}
+		if k.TTLSeconds > 0 {
+			v.CustomTTL = formatTTL(time.Duration(k.TTLSeconds) * time.Second)
+			v.SessionTTL = v.CustomTTL
+		}
+		d.Keys = append(d.Keys, v)
 	}
 	for _, c := range cfg.OAuth.Clients {
 		d.OAuthClients = append(d.OAuthClients, c.Name)

@@ -88,6 +88,16 @@ type SettingsData struct {
 	NotifyTopic     string
 	PasskeysEnabled bool
 	Passkeys        []PasskeyView
+	// PushKey is the VAPID public key; empty when Web Push is off.
+	PushKey     string
+	PushDevices []PushDevice
+}
+
+// PushDevice is one subscribed browser on the settings page.
+type PushDevice struct {
+	ID      string
+	Label   string
+	Created time.Time
 }
 
 // AuditData feeds audit.tmpl.

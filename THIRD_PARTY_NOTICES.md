@@ -14,6 +14,7 @@ The set below is every module that reaches a released binary. It was derived wit
 
 | Module | Version | SPDX |
 |--------|---------|------|
+| `github.com/SherClockHolmes/webpush-go` | `v1.4.0` | `MIT` |
 | `github.com/beorn7/perks` | `v1.0.1` | `MIT` |
 | `github.com/cespare/xxhash/v2` | `v2.3.0` | `MIT` |
 | `github.com/dustin/go-humanize` | `v1.1.0` | `MIT` |
@@ -63,9 +64,39 @@ The set below is every module that reaches a released binary. It was derived wit
 | `modernc.org/memory` | `v1.12.1` | `BSD-3-Clause` |
 | `modernc.org/sqlite` | `v1.62.0` | `BSD-3-Clause` |
 
-48 modules. Every licence was read from the module cache; none was inferred.
+49 modules. Every licence was read from the module cache; none was inferred.
 
 ## Full licence texts
+
+### `github.com/SherClockHolmes/webpush-go` v1.4.0
+
+SPDX identifier: `MIT`
+
+`LICENSE`:
+
+```text
+MIT License
+
+Copyright (c) 2016 Ethan Holmes
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ### `github.com/beorn7/perks` v1.0.1
 

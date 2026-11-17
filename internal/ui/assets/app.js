@@ -72,6 +72,40 @@
     }
   };
 
+  const deviceName = () => {
+    const ua = navigator.userAgent;
+    const browser = [["Edg/", "Edge"], ["Firefox/", "Firefox"], ["Chrome/", "Chrome"], ["Safari/", "Safari"]]
+      .find(([m]) => ua.includes(m))?.[1] || "Browser";
+    const os = [["Android", "Android"], ["iPhone", "iPhone"], ["iPad", "iPad"], ["Mac OS", "macOS"], ["Windows", "Windows"], ["Linux", "Linux"]]
+      .find(([m]) => ua.includes(m))?.[1];
+    return os ? `${browser} on ${os}` : browser;
+  };
+
+  // A fresh subscription each time, so a rotated server key never lingers.
+  const enablePush = async (key) => {
+    const status = document.querySelector("[data-push-status]");
+    const say = (msg) => {
+      if (status) status.textContent = msg;
+    };
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      say("This browser does not offer push notifications. On iPhone and iPad, add this site to the Home Screen first.");
+      return;
+    }
+    if ((await Notification.requestPermission()) !== "granted") {
+      say("Notifications are blocked for this site. Allow them in the browser settings.");
+      return;
+    }
+    say("Sending a test push…");
+    await navigator.serviceWorker.register("/sw.js");
+    const reg = await navigator.serviceWorker.ready;
+    const old = await reg.pushManager.getSubscription();
+    if (old) await old.unsubscribe();
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64.dec(key) });
+    const { endpoint, keys } = sub.toJSON();
+    await postJSON("/portal/push/subscribe", JSON.stringify({ endpoint, keys, label: deviceName() }));
+    location.reload();
+  };
+
   const addPasskey = async () => {
     const { publicKey } = await postJSON("/settings/passkeys/begin");
     publicKey.challenge = b64.dec(publicKey.challenge);
@@ -175,6 +209,14 @@
     const login = e.target.closest("[data-passkey-login]");
     if (login) {
       loginWithPasskey(login.dataset.passkeyLogin).catch((err) => showError(err.message));
+      return;
+    }
+    const push = e.target.closest("[data-push-enable]");
+    if (push) {
+      enablePush(push.dataset.pushEnable).catch((err) => {
+        const status = document.querySelector("[data-push-status]");
+        if (status) status.textContent = `Push not enabled: ${err.message}`;
+      });
       return;
     }
     const tools = e.target.closest("[data-tools]");

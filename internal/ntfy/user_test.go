@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
+	"github.com/tamcore/mcp-auth-proxy/internal/webpush"
 )
 
 // fakeServer is a minimal ntfy: /v1/health plus JSON publish on /.
@@ -123,5 +124,49 @@ func TestUserNotifierPushesToKeyOwnersTarget(t *testing.T) {
 	}
 	if f.count() != 1 {
 		t.Fatal("no push may go out for a user without a target")
+	}
+}
+
+type fakePusher struct {
+	sent  int
+	calls map[string]webpush.Payload
+}
+
+func (p *fakePusher) Push(_ context.Context, userID string, m webpush.Payload) (int, error) {
+	p.calls[userID] = m
+	return p.sent, nil
+}
+
+func TestUserNotifierAlsoPushesToDevices(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "proxy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	now := time.Now().UTC()
+	if err := st.CreateUser(ctx, &store.User{ID: "u_dev", Username: "dev", CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	owner := "u_dev"
+	if err := st.CreateKey(ctx, &store.Key{ID: "k_dev", Kind: store.KeyKindStatic, Label: "dev", SecretHash: "h_dev",
+		Upstreams: []string{}, CreatedAt: now, UserID: &owner}); err != nil {
+		t.Fatal(err)
+	}
+	p := &fakePusher{sent: 1, calls: map[string]webpush.Payload{}}
+	n := NewUserNotifier(st, nil, nil,
+		func(id string) string { return "http://p/approve/" + id }, func(id string) string { return "http://p/deny/" + id }).
+		WithDevices(p)
+	ch := &store.Challenge{ID: "c1", KeyID: "k_dev", ToolName: "t", PendingOTP: "54321", ExpiresAt: now.Add(time.Minute)}
+	if err := n.Notify(ctx, ch, "dev"); err != nil {
+		t.Fatalf("a delivered device push is enough without an ntfy target: %v", err)
+	}
+	got := p.calls["u_dev"]
+	if !strings.Contains(got.Body, "54321") || got.Approve != "http://p/approve/c1" || got.Deny != "http://p/deny/c1" {
+		t.Fatalf("device payload: %+v", got)
+	}
+	p.sent = 0
+	if err := n.Notify(ctx, ch, "dev"); err != ErrNoTarget {
+		t.Fatalf("no device reached and no ntfy target: want ErrNoTarget, got %v", err)
 	}
 }

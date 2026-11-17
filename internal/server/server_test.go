@@ -278,3 +278,17 @@ func TestHSTSOnlyForHTTPSBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceWorkerServedFromRoot(t *testing.T) {
+	ts := newTestServer(t)
+	resp, err := http.Get(ts.URL + "/sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") ||
+		resp.Header.Get("Cache-Control") != "no-cache" || !strings.Contains(string(body), "notificationclick") {
+		t.Fatalf("sw.js: %d %v", resp.StatusCode, resp.Header)
+	}
+}

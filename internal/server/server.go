@@ -76,6 +76,9 @@ func New(ctx context.Context, cfg *config.Config, st *store.Store, g *gate.Gate,
 	}, nil
 }
 
+// SetDevices enables Web Push device subscriptions in the portal.
+func (s *Server) SetDevices(d webui.Devices) { s.webui.Devices = d }
+
 // Handler returns the root mux.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -84,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/mcp/", s.authMiddleware(mcpHandler))
 	s.webui.Register(mux)
 	mux.Handle("GET /static/", s.pages.Static())
+	mux.Handle("GET /sw.js", s.pages.ServiceWorker())
 	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
 	mux.HandleFunc("POST /oauth/consent", s.requireLogin(s.as.HandleConsent))
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)

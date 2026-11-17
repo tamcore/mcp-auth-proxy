@@ -54,6 +54,7 @@ func (ui *WebUI) renderSettings(w http.ResponseWriter, r *http.Request, user *st
 			ID: base64.RawURLEncoding.EncodeToString(p.ID), Name: p.Name, Created: p.CreatedAt, LastUsed: p.LastUsedAt,
 		})
 	}
+	ui.pushDevices(r, user, &d)
 	ui.pages.Render(w, status, "settings", page("Settings", user, d))
 }
 

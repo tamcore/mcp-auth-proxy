@@ -81,4 +81,4 @@ The `mcp_proxy_key_*` gauges are read from the database on every scrape, so they
 
 ## Upgrades and backups
 
-Schema migrations run on start and are forward-only. Before it migrates an existing database, the proxy writes a snapshot `proxy.db.pre-v<N>.bak` next to it; prune old snapshots by hand. A build refuses a database newer than itself, and one whose recorded migrations (name and checksum) differ from its own. A leftover snapshot is reused only if it is a valid database at the expected version. Back up `proxy.db` and `sign.secret` together.
+Schema migrations run on start and are forward-only. Before it migrates an existing database, the proxy writes a snapshot `proxy.db.pre-v<N>.bak` next to it; prune old snapshots by hand. A build refuses a database newer than itself, and one whose recorded migrations (name and checksum) differ from its own. A leftover snapshot is reused only if it is a valid database at the expected version. Back up `proxy.db`, `sign.secret` and `vapid.json` together.

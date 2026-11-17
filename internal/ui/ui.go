@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//go:embed assets/app.css assets/app.js templates/*.tmpl
+//go:embed assets/app.css assets/app.js assets/sw.js templates/*.tmpl
 var files embed.FS
 
 // User is the logged-in user shown in the top bar.
@@ -60,7 +60,7 @@ func New(logger *slog.Logger) *Renderer {
 	}
 	r := &Renderer{pages: map[string]*template.Template{}, assets: map[string]asset{}, logger: logger}
 	versions := map[string]string{}
-	for _, name := range []string{"app.css", "app.js"} {
+	for _, name := range []string{"app.css", "app.js", "sw.js"} {
 		body, err := files.ReadFile("assets/" + name)
 		if err != nil {
 			panic(err)
@@ -150,6 +150,18 @@ func (r *Renderer) Static() http.Handler {
 		}
 		w.Header().Set("Content-Type", a.ctype)
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
+	})
+}
+
+// ServiceWorker serves sw.js from the site root, so its scope covers every
+// page. It is revalidated on each load so updates reach browsers.
+func (r *Renderer) ServiceWorker() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		a := r.assets["sw.js"]
+		w.Header().Set("Content-Type", a.ctype)
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
 	})

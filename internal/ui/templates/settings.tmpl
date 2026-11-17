@@ -87,4 +87,26 @@
   {{end}}
 </section>
 
+{{if .PushKey}}
+<section class="card" aria-labelledby="devices" data-testid="push-devices">
+  <h2 id="devices" class="card-title">This browser and other devices</h2>
+  <p class="mb-4 text-sm">Get codes as notifications directly on this browser or phone, in addition to ntfy. On iPhone and iPad, add this site to the Home Screen first. Approve/Deny buttons in the notification work on Android and desktop Chrome, Edge and Firefox; elsewhere a tap opens this portal.</p>
+  {{if .PushDevices}}
+  <ul class="mb-4 divide-y divide-slate-200 dark:divide-slate-700">
+    {{range .PushDevices}}
+    <li class="flex flex-wrap items-center gap-2 py-2" data-testid="push-device">
+      <span class="min-w-0 flex-1"><strong>{{.Label}}</strong> <span class="muted text-xs">added {{when (ptr .Created)}}</span></span>
+      <form method="post" action="/portal/push/delete">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn-ghost">Remove</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+  <button type="button" class="btn" data-push-enable="{{.PushKey}}">Enable on this device</button>
+  <p class="muted mt-3 text-sm" role="status" data-push-status></p>
+</section>
+{{end}}
+
 {{end}}{{end}}

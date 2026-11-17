@@ -20,6 +20,11 @@ state_dir: ./data
 # `key create --ttl`).
 session_ttl: 8h
 
+# Destinations that users control (own upstreams, ntfy servers, Web Push
+# endpoints) must resolve to public addresses. List CIDR prefixes here to open
+# private ones, e.g. a home network. Configured upstreams are not restricted.
+egress_allow: []
+
 otp:
   digits: 5            # one-time code length
   expiry: 3m           # code lifetime

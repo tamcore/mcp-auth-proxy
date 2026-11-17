@@ -166,3 +166,21 @@ func TestOwnUpstreamWithBearerToken(t *testing.T) {
 		t.Fatal("token must never be shown again")
 	}
 }
+
+func TestOwnUpstreamOnPrivateAddressIsRefused(t *testing.T) {
+	st, ts := newTestUI(t, func(c *config.Config) { c.EgressAllow = nil })
+	seedUser(t, st, testBob, linkPw)
+	bob := login(t, ts, testBob, linkPw)
+	form := url.Values{nameField: {"ha"}, urlField: {mcpUpstream(t, "")}}
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/portal/upstream", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(bob)
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("loopback upstream without egress_allow: want 400, got %d", resp.StatusCode)
+	}
+}

@@ -52,6 +52,7 @@ listen_addr: 127.0.0.1:%d
 ops_listen_addr: 127.0.0.1:0
 state_dir: %s
 session_ttl: 8h
+egress_allow: [127.0.0.0/8, "::1/128"]
 users: [alice, bob]
 admins: [alice]
 upstreams:

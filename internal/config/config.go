@@ -6,12 +6,15 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+
+	"github.com/tamcore/mcp-auth-proxy/internal/egress"
 )
 
 // Defaults.
@@ -51,6 +54,8 @@ type Config struct {
 	Admins     []string
 	Upstreams  []UpstreamConfig
 	OAuth      OAuthConfig
+	// EgressAllow opens non-public prefixes for user-controlled destinations.
+	EgressAllow []netip.Prefix
 }
 
 // OTPConfig holds the one-time-code gate tuning.
@@ -162,6 +167,11 @@ func Load(path string) (*Config, error) {
 			AuthorizeCodeTTL: v.GetDuration("oauth.authorize_code_ttl"),
 		},
 	}
+	allow, err := egress.Parse(v.GetStringSlice("egress_allow"))
+	if err != nil {
+		return nil, fmt.Errorf("config: egress_allow: %w", err)
+	}
+	cfg.EgressAllow = allow
 	if err := unmarshalSlice(v, "upstreams", &cfg.Upstreams); err != nil {
 		return nil, err
 	}

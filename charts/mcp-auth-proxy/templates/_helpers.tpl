@@ -49,6 +49,7 @@ listen_addr: {{ .Values.config.listenAddr | quote }}
 ops_listen_addr: "0.0.0.0:9090"
 state_dir: /data
 session_ttl: {{ .Values.config.sessionTTL | quote }}
+egress_allow: {{ .Values.config.egressAllow | toJson }}
 {{- if not .Values.config.users }}{{ fail "config.users needs at least one user" }}{{ end }}
 users: {{ .Values.config.users | toJson }}
 admins: {{ .Values.config.admins | toJson }}

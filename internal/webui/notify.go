@@ -39,7 +39,7 @@ func (ui *WebUI) handleNotifySave(w http.ResponseWriter, r *http.Request) {
 			token = prev.Token
 		}
 	}
-	base, err := ntfy.Validate(r.Context(), nil, r.PostForm.Get("url"), topic, token)
+	base, err := ntfy.Validate(r.Context(), ui.ntfy, r.PostForm.Get("url"), topic, token)
 	if err != nil {
 		ui.renderSettings(w, r, user, http.StatusBadRequest, "Push target not saved: "+err.Error(), "")
 		return

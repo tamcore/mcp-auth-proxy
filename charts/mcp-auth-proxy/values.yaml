@@ -38,6 +38,9 @@ config:
   baseURL: ""
   listenAddr: "0.0.0.0:8080"
   sessionTTL: 8h
+  # CIDR prefixes that users' own upstreams, ntfy servers and Web Push
+  # endpoints may reach although they are not public, e.g. ["192.168.1.0/24"].
+  egressAllow: []
   logLevel: info
   # Usernames of the instance. Users missing from the database get a single-use
   # invite link in the pod log on start. Required.

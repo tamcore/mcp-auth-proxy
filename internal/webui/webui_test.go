@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -66,6 +67,8 @@ func newTestWebUI(t *testing.T, mutate ...func(*config.Config)) (*store.Store, *
 		},
 		Audit: config.AuditConfig{Enabled: true, Retention: 720 * time.Hour},
 		OAuth: config.OAuthConfig{TokenTTL: time.Hour, AuthorizeCodeTTL: 10 * time.Minute},
+		// Test upstreams and ntfy fakes listen on loopback.
+		EgressAllow: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")},
 	}
 	for _, f := range mutate {
 		f(cfg)

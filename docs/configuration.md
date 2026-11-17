@@ -9,6 +9,7 @@
 | `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
 | `state_dir` | `./data` | holds `proxy.db`, `sign.secret` and `vapid.json` |
 | `session_ttl` | `8h` | session lifetime after auth |
+| `egress_allow` | `[]` | CIDR prefixes that users' own upstreams, ntfy servers and Web Push endpoints may reach although they are not public; by default those destinations must resolve to public addresses (checked after DNS, on every connection). Upstreams in this file are not restricted. |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
 | `users` / `admins` | – | user names; the admin role is set only here |
 | `audit.enabled` / `log_responses` / `retention` | `true` / `false` / `720h` | per-user audit log of tool calls |

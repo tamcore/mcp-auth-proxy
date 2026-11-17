@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
+	"github.com/tamcore/mcp-auth-proxy/internal/egress"
 	"github.com/tamcore/mcp-auth-proxy/internal/gate"
 	"github.com/tamcore/mcp-auth-proxy/internal/mcpserver"
 	"github.com/tamcore/mcp-auth-proxy/internal/metrics"
@@ -98,12 +99,15 @@ func runServe(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	devices := webpush.New(st, httpClient, pushKeys, cfg.BaseURL, logger)
-	g.SetNotifier(ntfy.NewUserNotifier(st, httpClient, logger, g.ApproveURL, g.DenyURL).WithDevices(devices))
+	guard := egress.New(cfg.EgressAllow)
+	userHTTP := guard.Client(30 * time.Second)
+	devices := webpush.New(st, userHTTP, pushKeys, cfg.BaseURL, logger)
+	g.SetNotifier(ntfy.NewUserNotifier(st, userHTTP, logger, g.ApproveURL, g.DenyURL).WithDevices(devices))
 	pool := upstream.NewPool(cfg.Upstreams, st, httpClient, logger)
 	proxy := mcpserver.New(mcpserver.Options{
 		Pool: pool, Store: st, Gate: g, Metrics: m, Logger: logger,
 		AuditEnabled: cfg.Audit.Enabled, LogResponses: cfg.Audit.LogResponses,
+		UserClient: guard.Client(0),
 	})
 	srv, err := server.New(ctx, cfg, st, g, proxy, m, secret, logger)
 	if err != nil {

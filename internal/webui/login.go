@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -35,7 +36,11 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		hash = user.PasswordHash
 	}
-	ok := store.CheckPassword(hash, password)
+	ok, checked := ui.checkPassword(r.Context(), hash, password)
+	if !checked {
+		http.Error(w, "request cancelled", http.StatusServiceUnavailable)
+		return
+	}
 	if err == nil && user.Disabled {
 		ui.logger.Warn("login refused: user disabled", "user", username, "remote", r.RemoteAddr)
 	} else if !ok {
@@ -49,6 +54,18 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 	ui.logger.Info("login ok", "user", user.Username, "remote", r.RemoteAddr)
 	ui.sessions.Set(w, ui.sessions.IssueFor(user))
 	http.Redirect(w, r, safeNext(r.PostForm.Get("next")), http.StatusFound)
+}
+
+// checkPassword runs bcrypt in one of maxPasswordChecks slots, so a login flood
+// cannot use all CPUs; checked is false when ctx ends while waiting.
+func (ui *WebUI) checkPassword(ctx context.Context, hash, password string) (ok, checked bool) {
+	select {
+	case ui.passwordChecks <- struct{}{}:
+	case <-ctx.Done():
+		return false, false
+	}
+	defer func() { <-ui.passwordChecks }()
+	return store.CheckPassword(hash, password), true
 }
 
 func (ui *WebUI) loginFailed(w http.ResponseWriter, r *http.Request, status int, msg string) {

@@ -23,7 +23,9 @@ type WebUI struct {
 	webauthn   *webauthn.WebAuthn
 	ceremonies *ceremonies
 	logins     *loginLimiter
-	logger     *slog.Logger
+	// passwordChecks holds a token per running bcrypt comparison.
+	passwordChecks chan struct{}
+	logger         *slog.Logger
 
 	// Devices sends Web Push; nil hides device subscriptions.
 	Devices Devices
@@ -46,16 +48,17 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 	sessions := NewSessions(signSecret, nil)
 	sessions.secure = secure
 	return &WebUI{
-		webauthn:   wa,
-		ceremonies: &ceremonies{m: map[string]ceremony{}, secure: secure},
-		logins:     newLoginLimiter(nil),
-		store:      st,
-		cfg:        cfg,
-		sessions:   sessions,
-		pages:      pages,
-		approvals:  approvals,
-		links:      &pendingLinks{m: map[string]pendingLink{}},
-		logger:     logger,
+		webauthn:       wa,
+		ceremonies:     &ceremonies{m: map[string]ceremony{}, secure: secure},
+		logins:         newLoginLimiter(nil),
+		passwordChecks: make(chan struct{}, maxPasswordChecks),
+		store:          st,
+		cfg:            cfg,
+		sessions:       sessions,
+		pages:          pages,
+		approvals:      approvals,
+		links:          &pendingLinks{m: map[string]pendingLink{}},
+		logger:         logger,
 	}
 }
 

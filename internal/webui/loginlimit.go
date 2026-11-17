@@ -11,11 +11,14 @@ const (
 	// maxTrackedLogins bounds the limiter: every attempted name gets an entry,
 	// known or not, so the response does not reveal which names exist.
 	maxTrackedLogins = 10000
+	// maxPasswordChecks caps concurrent bcrypt comparisons in login.
+	maxPasswordChecks = 4
 )
 
 // loginLimiter locks a username for a minute after maxFailedLogins failures in
 // a row; every further failure locks it again.
-// ponytail: a full map evicts the oldest entry, so ~10k fresh names can unlock a name early.
+// ponytail: a full map evicts the oldest entry, so ~10k fresh names unlock a
+// name early; the bcrypt slots make that take minutes.
 type loginLimiter struct {
 	mu     sync.Mutex
 	failed map[string]failedLogins

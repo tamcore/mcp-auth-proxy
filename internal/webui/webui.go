@@ -4,13 +4,19 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
+	"github.com/tamcore/mcp-auth-proxy/internal/egress"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	view "github.com/tamcore/mcp-auth-proxy/internal/ui"
 )
+
+// ntfyTimeout bounds validating a user's ntfy target.
+const ntfyTimeout = 10 * time.Second
 
 // WebUI is the login + portal handler set.
 type WebUI struct {
@@ -26,6 +32,9 @@ type WebUI struct {
 	// passwordChecks holds a token per running bcrypt comparison.
 	passwordChecks chan struct{}
 	logger         *slog.Logger
+	// egress dials user-controlled destinations: own upstreams, ntfy.
+	egress *http.Client
+	ntfy   *http.Client
 
 	// Devices sends Web Push; nil hides device subscriptions.
 	Devices Devices
@@ -45,6 +54,7 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 		logger.Warn("passkeys disabled", "error", err)
 	}
 	secure := strings.HasPrefix(cfg.BaseURL, "https://")
+	guard := egress.New(cfg.EgressAllow)
 	sessions := NewSessions(signSecret, nil)
 	sessions.secure = secure
 	return &WebUI{
@@ -59,6 +69,9 @@ func New(st *store.Store, cfg *config.Config, signSecret []byte, pages *view.Ren
 		approvals:      approvals,
 		links:          &pendingLinks{m: map[string]pendingLink{}},
 		logger:         logger,
+		egress:         guard.Client(0),
+		ntfy: &http.Client{Transport: guard.Transport(), Timeout: ntfyTimeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 

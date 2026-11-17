@@ -221,3 +221,41 @@ func TestOverlongUsernameIsRejected(t *testing.T) {
 		t.Fatal("an overlong username must be rejected")
 	}
 }
+
+func TestEgressAllowParsed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "c.yaml")
+	body := "base_url: https://proxy.example\negress_allow: [192.168.1.0/24, ntfy.example.com]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || len(cfg.EgressAllow.Prefixes) != 1 || cfg.EgressAllow.Prefixes[0].String() != "192.168.1.0/24" ||
+		!cfg.EgressAllow.Hosts["ntfy.example.com"] {
+		t.Fatalf("egress_allow: %v %v", cfg, err)
+	}
+	bad := "base_url: https://proxy.example\negress_allow: [\"*.example.com\"]\n"
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("a malformed prefix must be rejected")
+	}
+}
+
+func TestEgressIsUnrestrictedByDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	if err := os.WriteFile(path, []byte("base_url: https://proxy.example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || !cfg.EgressAllow.Any {
+		t.Fatalf("default must allow any destination: %+v %v", cfg.EgressAllow, err)
+	}
+	if err := os.WriteFile(path, []byte("base_url: https://proxy.example\negress_restrict: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = Load(path); err != nil || cfg.EgressAllow.Any {
+		t.Fatalf("egress_restrict: true must enable the guard: %+v %v", cfg.EgressAllow, err)
+	}
+}

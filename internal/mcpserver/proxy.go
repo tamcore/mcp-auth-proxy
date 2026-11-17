@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,7 @@ type Proxy struct {
 
 	auditEnabled bool
 	logResponses bool
+	userClient   *http.Client
 
 	mu      sync.Mutex
 	servers map[string]cachedServer
@@ -55,6 +57,8 @@ type Options struct {
 	Logger       *slog.Logger
 	AuditEnabled bool
 	LogResponses bool
+	// UserClient dials users' own upstreams; nil uses the default transport.
+	UserClient *http.Client
 }
 
 // New builds the proxy.
@@ -64,7 +68,7 @@ func New(o Options) *Proxy {
 	}
 	return &Proxy{
 		pool: o.Pool, store: o.Store, gate: o.Gate, metrics: o.Metrics, logger: o.Logger,
-		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses,
+		auditEnabled: o.AuditEnabled, logResponses: o.LogResponses, userClient: o.UserClient,
 		servers: map[string]cachedServer{}, userUps: map[string]map[string]*upstream.Upstream{},
 	}
 }
@@ -203,7 +207,7 @@ func (p *Proxy) userCache(ctx context.Context, userID string) (map[string]*upstr
 	}
 	cache = map[string]*upstream.Upstream{}
 	for _, row := range ups {
-		cache[row.Name] = upstream.NewFromConfig(row.Config(), p.store, nil, p.logger)
+		cache[row.Name] = upstream.NewFromConfig(row.Config(), p.store, p.userClient, p.logger)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

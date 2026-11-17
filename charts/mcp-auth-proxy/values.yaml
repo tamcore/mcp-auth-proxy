@@ -38,6 +38,11 @@ config:
   baseURL: ""
   listenAddr: "0.0.0.0:8080"
   sessionTTL: 8h
+  # true: users' own upstreams, ntfy servers and Web Push endpoints must
+  # resolve to public addresses unless listed in egressAllow (CIDR prefixes or
+  # exact host names, e.g. ["192.168.1.0/24", "ntfy.example.com"]).
+  egressRestrict: false
+  egressAllow: []
   logLevel: info
   # Usernames of the instance. Users missing from the database get a single-use
   # invite link in the pod log on start. Required.

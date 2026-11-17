@@ -20,6 +20,14 @@ state_dir: ./data
 # `key create --ttl`).
 session_ttl: 8h
 
+# SSRF guard for destinations that users control (own upstreams, ntfy servers,
+# Web Push endpoints). Off by default: users are trusted. When true, those
+# destinations must resolve to public addresses unless listed in egress_allow
+# (CIDR prefixes or exact host names, e.g. 192.168.1.0/24 or ntfy.example.com).
+# Configured upstreams are never restricted.
+egress_restrict: false
+egress_allow: []
+
 otp:
   digits: 5            # one-time code length
   expiry: 3m           # code lifetime

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,13 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 	"github.com/tamcore/mcp-auth-proxy/internal/ui"
+)
+
+// RFC 7636 lengths: an S256 challenge is unpadded base64url of 32 bytes.
+const (
+	challengeLen   = 43
+	minVerifierLen = 43
+	maxVerifierLen = 128
 )
 
 // authCode is a single-use, expiring in-memory authorization code.
@@ -53,7 +61,9 @@ type Server struct {
 	CurrentUser func(*http.Request) *store.User
 }
 
-// New builds the AS. Clients are seeded into the store from config.
+// New builds the AS. The store's clients are synced to config: configured ones
+// are upserted, all others are removed with their access tokens, and their
+// identity keys are revoked.
 func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Renderer,
 	logger *slog.Logger) (*Server, error) {
 	s := &Server{
@@ -65,7 +75,9 @@ func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Ren
 		pages:  pages,
 		codes:  map[string]*authCode{},
 	}
+	keep := make([]string, 0, len(cfg.OAuth.Clients))
 	for i := range cfg.OAuth.Clients {
+		keep = append(keep, cfg.OAuth.Clients[i].ClientID)
 		c := &store.OAuthClient{
 			ClientID:     cfg.OAuth.Clients[i].ClientID,
 			Name:         cfg.OAuth.Clients[i].Name,
@@ -76,6 +88,9 @@ func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Ren
 		if err := st.UpsertOAuthClient(ctx, c); err != nil {
 			return nil, err
 		}
+	}
+	if err := st.PruneOAuthClients(ctx, keep, s.now()); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -116,8 +131,8 @@ func (s *Server) validateAuthorize(ctx context.Context, q url.Values) (*authoriz
 	if q.Get("code_challenge_method") != "S256" {
 		return nil, errors.New("code_challenge_method must be S256")
 	}
-	if q.Get("code_challenge") == "" {
-		return nil, errors.New("code_challenge is required")
+	if !validChallenge(q.Get("code_challenge")) {
+		return nil, errors.New("code_challenge must be a base64url SHA-256 (43 chars)")
 	}
 	return &authorizeParams{
 		clientID:      clientID,
@@ -244,8 +259,11 @@ func (s *Server) HandleToken(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code")
 		return
 	}
-	code := f.Get("code")
-	ac, ok := s.takeCode(code)
+	if !validVerifier(f.Get("code_verifier")) {
+		s.writeError(w, http.StatusBadRequest, "invalid_request", "code_verifier must be 43-128 unreserved chars")
+		return
+	}
+	ac, ok := s.takeCode(f.Get("code"))
 	if !ok {
 		s.writeError(w, http.StatusBadRequest, "invalid_grant", "unknown, used, or expired code")
 		return
@@ -289,10 +307,29 @@ func (s *Server) takeCode(code string) (*authCode, bool) {
 	return ac, true
 }
 
-func verifyPKCE(verifier, challenge string) bool {
-	if verifier == "" {
+func validChallenge(c string) bool {
+	b, err := base64.RawURLEncoding.Strict().DecodeString(c)
+	return len(c) == challengeLen && err == nil && len(b) == sha256.Size
+}
+
+// validVerifier: RFC 7636 section 4.1, unreserved chars [A-Za-z0-9-._~].
+func validVerifier(v string) bool {
+	if len(v) < minVerifierLen || len(v) > maxVerifierLen {
 		return false
 	}
+	for _, c := range v {
+		if !isUnreserved(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func isUnreserved(c rune) bool {
+	return c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || strings.ContainsRune("-._~", c)
+}
+
+func verifyPKCE(verifier, challenge string) bool {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:]) == challenge
 }

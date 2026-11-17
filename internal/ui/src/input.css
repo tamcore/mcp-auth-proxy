@@ -27,6 +27,14 @@
   a {
     @apply text-teal-700 underline-offset-2 hover:underline dark:text-teal-300;
   }
+  /* The installed app behaves like a native one: no zoom, no rubber band. */
+  @media (display-mode: standalone) {
+    html {
+      overscroll-behavior: none;
+      touch-action: pan-x pan-y;
+      -webkit-text-size-adjust: 100%;
+    }
+  }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-teal-600 dark:outline-teal-300;
   }
@@ -52,8 +60,9 @@
   @apply inline-flex cursor-pointer items-center justify-center rounded-full border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 motion-reduce:transition-none dark:border-rose-400/50 dark:text-rose-300 dark:hover:bg-rose-500/10;
 }
 
+/* 16px on phones: iOS zooms into smaller inputs on focus. */
 @utility field {
-  @apply block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500;
+  @apply block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 sm:text-sm;
 }
 
 @utility field-label {

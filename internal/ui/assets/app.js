@@ -115,6 +115,15 @@
   });
   window.addEventListener("appinstalled", () => showAll("[data-install]", false));
   // iOS has no install prompt; Web Push there needs the Home Screen app.
+  // Installed app only: the browser tab keeps zoom for accessibility.
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  if (standalone) {
+    document.addEventListener("gesturestart", (e) => e.preventDefault());
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelector('meta[name="viewport"]')?.setAttribute("content",
+        "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no");
+    });
+  }
   const iosHint = () => {
     const ios = /iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
     showAll("[data-install-ios]", ios && !navigator.standalone && !("PushManager" in window));

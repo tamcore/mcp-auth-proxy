@@ -3,11 +3,14 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,16 +58,13 @@ func runServe(cmd *cobra.Command) error {
 		return err
 	}
 	logger := newServeLogger()
-	st, err := openStore(ctx, cfg)
+	st, err := openState(ctx, cfg, logger, openStore)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = st.Close() }()
 	for _, m := range st.MigrationsApplied() {
 		logger.Info("migration applied", "migration", m, "backup", st.MigrationBackup())
-	}
-	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
-		return err
 	}
 	secret, err := store.EnsureSignSecret(cfg.StateDir)
 	if err != nil {
@@ -117,7 +117,40 @@ func runServe(cmd *cobra.Command) error {
 	app := newHTTPServer(cfg.ListenAddr, srv.Handler())
 	ops := newHTTPServer(cfg.OpsListenAddr, srv.OpsHandler())
 	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)
-	return serveUntilDone(ctx, logger, app, ops)
+	return serveUntilDone(ctx, logger, shutdownGrace, app, ops)
+}
+
+// openState secures the state dir before anything in it is opened or created.
+func openState(ctx context.Context, cfg *config.Config, logger *slog.Logger,
+	open func(context.Context, *config.Config) (*store.Store, error)) (*store.Store, error) {
+	if err := restrictStateDir(cfg.StateDir, logger); err != nil {
+		return nil, err
+	}
+	return open(ctx, cfg)
+}
+
+// restrictStateDir creates or tightens the state dir to 0700. A volume root
+// this process does not own (Kubernetes fsGroup) cannot be changed; its files
+// stay 0600.
+func restrictStateDir(dir string, logger *slog.Logger) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	perm := fi.Mode().Perm()
+	if perm&0o077 == 0 {
+		return nil
+	}
+	err = os.Chmod(dir, 0o700)
+	if errors.Is(err, fs.ErrPermission) {
+		logger.Warn("state dir is open to group or others and not owned by this process; its files stay owner-only",
+			"dir", dir, "mode", fmt.Sprintf("%04o", perm))
+		return nil
+	}
+	return err
 }
 
 // newHTTPServer bounds how long a client may take to send a request and keep
@@ -132,9 +165,11 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 	}
 }
 
+const shutdownGrace = 5 * time.Second
+
 // serveUntilDone runs the servers until ctx ends or one of them fails, then
-// shuts all of them down.
-func serveUntilDone(ctx context.Context, logger *slog.Logger, srvs ...*http.Server) error {
+// shuts all of them down within grace.
+func serveUntilDone(ctx context.Context, logger *slog.Logger, grace time.Duration, srvs ...*http.Server) error {
 	errCh := make(chan error, len(srvs))
 	for _, s := range srvs {
 		go func() {
@@ -150,11 +185,15 @@ func serveUntilDone(ctx context.Context, logger *slog.Logger, srvs ...*http.Serv
 		pending--
 		errs = append(errs, err)
 	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	for _, s := range srvs {
-		errs = append(errs, s.Shutdown(shutdownCtx))
+	shutdownErrs := make([]error, len(srvs))
+	var wg sync.WaitGroup
+	for i, s := range srvs {
+		wg.Go(func() { shutdownErrs[i] = s.Shutdown(shutdownCtx) })
 	}
+	wg.Wait()
+	errs = append(errs, shutdownErrs...)
 	for range pending {
 		errs = append(errs, <-errCh)
 	}

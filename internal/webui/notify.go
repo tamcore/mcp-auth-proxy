@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -16,6 +17,7 @@ type Approvals interface {
 	PendingCode(id string) (string, bool)
 	ApproveURL(id string) string
 	DenyURL(id string) string
+	Authorize(ctx context.Context, key *store.Key) (time.Time, error)
 }
 
 // handleNotifySave validates and stores the user's ntfy push target. Blank

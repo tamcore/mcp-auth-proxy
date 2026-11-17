@@ -71,9 +71,10 @@ type ceremony struct {
 	deadline time.Time
 }
 
-// maxCeremonies caps open ceremonies: passkey login begins unauthenticated.
-// A full map drops its oldest ceremony instead of refusing, so a flood cannot
-// lock out real logins, only make one retry.
+// maxCeremonies caps open ceremonies per kind (login, registration): passkey
+// login begins unauthenticated. A full kind drops its oldest ceremony instead
+// of refusing, so a login flood cannot lock out real logins, only make one
+// retry, and never touches registrations.
 const maxCeremonies = 1000
 
 // ponytail: in-memory, lost on restart; the user just starts again.
@@ -92,25 +93,32 @@ func (c *ceremonies) start(w http.ResponseWriter, data *webauthn.SessionData, us
 	id := base64.RawURLEncoding.EncodeToString(raw)
 	now := time.Now()
 	c.mu.Lock()
-	for k, v := range c.m {
-		if now.After(v.deadline) {
-			delete(c.m, k)
-		}
-	}
-	if len(c.m) >= maxCeremonies {
-		oldest := ""
-		for k, v := range c.m {
-			if oldest == "" || v.deadline.Before(c.m[oldest].deadline) {
-				oldest = k
-			}
-		}
-		delete(c.m, oldest)
-	}
+	c.makeRoom(now, userID == "")
 	c.m[id] = ceremony{data: *data, userID: userID, deadline: now.Add(ceremonyTTL)}
 	c.mu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: id, Path: "/", MaxAge: int(ceremonyTTL / time.Second),
 		HttpOnly: true, Secure: c.secure, SameSite: http.SameSiteStrictMode})
 	return nil
+}
+
+// makeRoom drops expired ceremonies, then the oldest of the given kind if
+// that kind is full. The caller holds c.mu.
+func (c *ceremonies) makeRoom(now time.Time, isLogin bool) {
+	n, oldest := 0, ""
+	for k, v := range c.m {
+		switch {
+		case now.After(v.deadline):
+			delete(c.m, k)
+		case (v.userID == "") == isLogin:
+			n++
+			if oldest == "" || v.deadline.Before(c.m[oldest].deadline) {
+				oldest = k
+			}
+		}
+	}
+	if n >= maxCeremonies {
+		delete(c.m, oldest)
+	}
 }
 
 // finish removes and returns the request's ceremony if it is live and belongs

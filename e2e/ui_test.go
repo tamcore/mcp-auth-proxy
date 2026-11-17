@@ -178,7 +178,7 @@ func uiApproveFromPhone(t *testing.T, e *env, page playwright.Page, token string
 }
 
 // uiEndSession ends the laptop key's session in the portal; the next call is
-// gated again.
+// gated again until Authorize now.
 func uiEndSession(t *testing.T, page playwright.Page, sess *mcp.ClientSession) {
 	t.Helper()
 	key := page.GetByTestId("key").Filter(playwright.LocatorFilterOptions{HasText: "laptop"})
@@ -186,6 +186,11 @@ func uiEndSession(t *testing.T, page playwright.Page, sess *mcp.ClientSession) {
 	must(t, expect.Locator(key.GetByTestId("key-activity")).ToContainText("not authorized"))
 	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); !res.IsError {
 		t.Fatal("after End session the call must be gated again")
+	}
+	must(t, key.GetByRole("button", playwright.LocatorGetByRoleOptions{Name: "Authorize now"}).Click())
+	must(t, expect.Locator(key.GetByTestId("key-activity")).ToContainText("authorized until"))
+	if res := callTool(t, sess, echoTool, map[string]any{textArg: "hi"}); res.IsError {
+		t.Fatalf("after Authorize now: %q", textOf(res))
 	}
 }
 

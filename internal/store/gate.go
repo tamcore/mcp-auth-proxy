@@ -53,15 +53,25 @@ func (s *Store) GetSession(ctx context.Context, keyID string, now time.Time) (*S
 	return &sess, nil
 }
 
-// UpsertSession creates or replaces the session for a key.
+// UpsertSession creates or replaces the session for a key. A revoked or
+// unknown key returns ErrNotFound; check and write are one statement, so a
+// concurrent RevokeKey cannot be undone.
 func (s *Store) UpsertSession(ctx context.Context, sess *Session) error {
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO sessions (key_id, created_at, expires_at, origin) VALUES (?, ?, ?, ?)
+	res, err := s.db.ExecContext(ctx, `
+INSERT INTO sessions (key_id, created_at, expires_at, origin)
+SELECT id, ?, ?, ? FROM keys WHERE id = ? AND revoked_at IS NULL
 ON CONFLICT (key_id) DO UPDATE SET created_at = excluded.created_at,
     expires_at = excluded.expires_at, origin = excluded.origin`,
-		sess.KeyID, FormatTime(sess.CreatedAt), FormatTime(sess.ExpiresAt), sess.Origin)
+		FormatTime(sess.CreatedAt), FormatTime(sess.ExpiresAt), sess.Origin, sess.KeyID)
 	if err != nil {
 		return fmt.Errorf("store: upsert session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: upsert session: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

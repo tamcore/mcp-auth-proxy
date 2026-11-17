@@ -26,6 +26,10 @@ func (u *Upstream) BeginLink(redirectURI string) (*AuthRequest, error) {
 	if cfg == nil {
 		return nil, errors.New("upstream: oauth not configured for " + u.cfg.Name)
 	}
+	authz, err := url.Parse(cfg.AuthorizeURL)
+	if err != nil {
+		return nil, fmt.Errorf("upstream %s: authorize_url: %w", u.cfg.Name, err)
+	}
 	pkce, err := newPKCE()
 	if err != nil {
 		return nil, err
@@ -34,20 +38,20 @@ func (u *Upstream) BeginLink(redirectURI string) (*AuthRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := url.Values{
-		"response_type":         {"code"},
-		"redirect_uri":          {redirectURI},
-		"code_challenge":        {pkce.challenge},
-		"code_challenge_method": {"S256"},
-		"state":                 {state},
-	}
+	q := authz.Query()
+	q.Set("response_type", "code")
+	q.Set("redirect_uri", redirectURI)
+	q.Set("code_challenge", pkce.challenge)
+	q.Set("code_challenge_method", "S256")
+	q.Set("state", state)
 	q.Set(clientIDFormKey, cfg.ClientID)
 	if len(cfg.Scopes) > 0 {
 		q.Set("scope", strings.Join(cfg.Scopes, " "))
 	}
 	setResource(q, cfg.Resource)
+	authz.RawQuery = q.Encode()
 	return &AuthRequest{
-		URL:         cfg.AuthorizeURL + "?" + q.Encode(),
+		URL:         authz.String(),
 		State:       state,
 		Verifier:    pkce.verifier,
 		RedirectURI: redirectURI,

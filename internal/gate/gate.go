@@ -258,6 +258,12 @@ func (g *Gate) grantSession(ctx context.Context, key *store.Key, origin string, 
 	return expires, nil
 }
 
+// Authorize grants key a session without a challenge; the owner does this
+// from the portal (origin approve).
+func (g *Gate) Authorize(ctx context.Context, key *store.Key) (time.Time, error) {
+	return g.grantSession(ctx, key, store.OriginApprove, g.now())
+}
+
 // Approve handles the Approve button: sig must be the lowercase hex
 // HMAC-SHA256 of the challenge id under the sign secret. On success the
 // challenge is approved and a session is granted (origin approve).

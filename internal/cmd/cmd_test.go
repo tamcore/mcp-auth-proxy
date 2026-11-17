@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 	"github.com/tamcore/mcp-auth-proxy/internal/version"
 )
 
-func testConfigFile(t *testing.T) string {
+func testConfigFile(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := "base_url: http://127.0.0.1:8080\nstate_dir: " + dir + "\n" +
@@ -22,7 +23,6 @@ func testConfigFile(t *testing.T) string {
 		t.Fatal(err)
 	}
 	t.Setenv("MCP_PROXY_CONFIG", p)
-	return p
 }
 
 func runKeyCmd(t *testing.T, args ...string) string {
@@ -90,5 +90,26 @@ func TestHTTPServersBoundSlowClients(t *testing.T) {
 	}
 	if s.WriteTimeout != 0 {
 		t.Fatal("a WriteTimeout would cut streamed MCP responses")
+	}
+}
+
+type brokenPipe struct{}
+
+func (brokenPipe) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestKeyCreateFailsWhenTheTokenCannotBeShown(t *testing.T) {
+	for _, args := range [][]string{{"create", "--label", "x"}, {"create", "--label", "x", "--json"}} {
+		testConfigFile(t)
+		c := newKeyCmd()
+		c.SetOut(brokenPipe{})
+		c.SetErr(&bytes.Buffer{})
+		c.SetArgs(args)
+		err := c.Execute()
+		if err == nil || !strings.Contains(err.Error(), "revoke") || !strings.Contains(err.Error(), "k_") {
+			t.Fatalf("%v: a lost token must fail and name the key to revoke: %v", args, err)
+		}
+		if strings.Contains(err.Error(), "mak_") {
+			t.Fatalf("the error must not carry the token: %v", err)
+		}
 	}
 }

@@ -224,3 +224,20 @@ func TestEnsureKeysRejectsUnreadableDir(t *testing.T) {
 		t.Fatal("a key path that is a directory must fail")
 	}
 }
+
+func TestEnsureKeysRefusesASymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "elsewhere.json")
+	if err := os.WriteFile(target, []byte(`{"public":"p","private":"k"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, KeysFile)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureKeys(dir); err == nil {
+		t.Fatal("a symlinked key file must be refused")
+	}
+	if fi, _ := os.Stat(target); fi.Mode().Perm() != 0o644 {
+		t.Fatalf("the symlink target must stay untouched: %v", fi.Mode())
+	}
+}

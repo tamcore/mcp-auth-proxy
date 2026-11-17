@@ -90,10 +90,7 @@ func (ui *WebUI) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	cutoff := time.Unix(time.Now().Unix()+1, 0).UTC()
 	hash, err := store.HashPassword(pw)
 	if err == nil {
-		err = ui.store.SetUserPassword(r.Context(), user.ID, hash)
-	}
-	if err == nil {
-		err = ui.store.SetSessionsSince(r.Context(), user.ID, cutoff)
+		err = ui.store.SetUserPassword(r.Context(), user.ID, hash, cutoff)
 	}
 	if err != nil {
 		ui.logger.Error("change password", "user", user.Username, "error", err)

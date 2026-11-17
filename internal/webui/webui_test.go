@@ -245,6 +245,7 @@ func TestPortalKeyCreateVisibilityAndAudit(t *testing.T) {
 
 func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 	ctx := context.Background()
+	now := time.Now().UTC()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "proxy.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -265,10 +266,10 @@ func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 		t.Fatal("fresh user must have no usable password before the invite sets one")
 	}
 	// invite is consumable exactly once
-	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", time.Now().UTC()); err != nil {
+	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", now, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", time.Now().UTC()); err != store.ErrNotFound {
+	if _, err := st.ConsumeInvite(ctx, invites[testAlice], "h", now, now); err != store.ErrNotFound {
 		t.Fatalf("reuse must fail: %v", err)
 	}
 	// second run re-mints invites only for users who still have no password;
@@ -278,10 +279,10 @@ func TestEnsureConfigUsersMintsInvitesOnce(t *testing.T) {
 		t.Fatalf("passwordless users must get a fresh invite each start: %v %v", invites2, err)
 	}
 	// re-minting revokes the previous unused link
-	if _, err := st.ConsumeInvite(ctx, invites[testBob], "h", time.Now().UTC()); err != store.ErrNotFound {
+	if _, err := st.ConsumeInvite(ctx, invites[testBob], "h", now, now); err != store.ErrNotFound {
 		t.Fatalf("superseded invite must be invalid: %v", err)
 	}
-	if _, err := st.ConsumeInvite(ctx, invites2[testBob], "h", time.Now().UTC()); err != nil {
+	if _, err := st.ConsumeInvite(ctx, invites2[testBob], "h", now, now); err != nil {
 		t.Fatalf("fresh invite must work: %v", err)
 	}
 }
@@ -408,7 +409,7 @@ func adminFlow(t *testing.T, ts *httptest.Server, st *store.Store, ctx context.C
 	t.Helper()
 	client := noRedirectClient()
 	hash, _ := store.HashPassword("alice-pw")
-	if err := st.SetUserPassword(ctx, alice.ID, hash); err != nil {
+	if err := st.SetUserPassword(ctx, alice.ID, hash, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	aliceCookie := login(t, ts, testAlice, "alice-pw")

@@ -466,3 +466,48 @@ func TestTheLastEnabledAdminCannotBeDisabled(t *testing.T) {
 		t.Fatalf("unknown user: want ErrNotFound, got %v", err)
 	}
 }
+
+func TestRevokedKeyGetsNoSession(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	if err := st.CreateKey(ctx, newTestKey(testKeyID, "h", now)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RevokeKey(ctx, testKeyID, now); err != nil {
+		t.Fatal(err)
+	}
+	sess := &Session{KeyID: testKeyID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), Origin: OriginOTP}
+	err := st.UpsertSession(ctx, sess)
+	if err != ErrNotFound {
+		t.Fatalf("revoked key: want ErrNotFound, got %v", err)
+	}
+	if _, err := st.GetSession(ctx, testKeyID, now); err != ErrNotFound {
+		t.Fatalf("revoked key must have no session: %v", err)
+	}
+}
+
+func TestRevokeIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	st := openTest(t)
+	now := nowUTC()
+	if err := st.CreateKey(ctx, newTestKey(testKeyID, "h", now)); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.UpsertSession(ctx, &Session{KeyID: testKeyID, CreatedAt: now, ExpiresAt: now.Add(time.Hour), Origin: OriginOTP})
+	if _, err := st.db.ExecContext(ctx, `CREATE TRIGGER fail_supersede BEFORE UPDATE ON challenges
+BEGIN SELECT RAISE(ABORT, 'boom'); END`); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.CreateChallenge(ctx, newTestChallenge("c1", "h", "t", now, now.Add(time.Minute)))
+	if err := st.RevokeKey(ctx, testKeyID, now); err == nil {
+		t.Fatal("revoke must fail")
+	}
+	k, err := st.KeyByID(ctx, testKeyID)
+	if err != nil || k.Revoked() {
+		t.Fatalf("failed revoke must not leave the key revoked: %+v %v", k, err)
+	}
+	if _, err := st.GetSession(ctx, testKeyID, now); err != nil {
+		t.Fatalf("failed revoke must keep the session: %v", err)
+	}
+}

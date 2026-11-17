@@ -19,7 +19,7 @@
 
 ## Upstreams
 
-Each upstream has exactly one of `url` (Streamable HTTP) or `command` (stdio). Tools are exposed to clients as `{name}__{tool}`. `users` restricts an upstream to those users; omit it for a global upstream. With `oauth`, each user links their own account in the portal (see [usage](usage.md#upstream-oauth)).
+Each upstream has exactly one of `url` (Streamable HTTP) or `command` (stdio). Tools are exposed to clients as `{name}__{tool}`. `users` restricts an upstream to those users; omit it for a global upstream. With `oauth`, each user links their own account in the portal (see [usage](usage.md#upstream-oauth)). A query string in `oauth.authorize_url` (e.g. a tenant or policy parameter) is kept; the proxy's own authorization parameters replace any of the same name.
 
 ## Client-facing OAuth
 

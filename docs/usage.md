@@ -63,3 +63,5 @@ mcp-auth-proxy doctor                         # config/state/secret/upstream/use
 mcp-auth-proxy dev-echo                       # tiny stdio MCP echo server (fake upstream)
 mcp-auth-proxy version
 ```
+
+`key create` prints the token exactly once. If that output cannot be written (for example a closed pipe), the command fails and names the stored key: revoke it and create a new one.

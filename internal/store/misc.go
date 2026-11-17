@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"time"
 )
@@ -51,3 +53,32 @@ func mkdirAll(dir string) error { return os.MkdirAll(dir, 0o700) }
 func FormatTime(t time.Time) string { return t.UTC().Format(timeRFC3339Nano) }
 
 func ParseTime(s string) (time.Time, error) { return time.Parse(timeRFC3339Nano, s) }
+
+// ReadOwnerOnly reads a secret file and tightens it to 0600. It refuses a
+// symlink or other non-regular file, so it never reads or chmods a target
+// outside the state dir. Lstat runs first so a FIFO cannot block the open.
+func ReadOwnerOnly(path string) ([]byte, error) {
+	linked, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !linked.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	opened, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(linked, opened) {
+		return nil, fmt.Errorf("%s changed while it was opened", path)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(f)
+}

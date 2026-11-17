@@ -7,7 +7,7 @@
 | `base_url` | `http://127.0.0.1:8080` | canonical public URL (button URLs, MCP URL, passkey RP ID) |
 | `listen_addr` | `127.0.0.1:8080` | HTTP listen address |
 | `ops_listen_addr` | `127.0.0.1:9090` | ops listener: `/metrics`, `/healthz`, `/readyz` |
-| `state_dir` | `./data` | holds `proxy.db`, `sign.secret` and `vapid.json` |
+| `state_dir` | `./data` | holds `proxy.db`, `sign.secret` and `vapid.json` (each 0600; `sign.secret` and `vapid.json` must be regular files, a symlink is refused); `serve` creates or tightens the directory to 0700 before it opens anything in it, or logs a warning if it does not own it (e.g. a Kubernetes `fsGroup` volume root) |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
 | `users` / `admins` | – | user names; the admin role is set only here |
@@ -19,7 +19,7 @@
 
 ## Upstreams
 
-Each upstream has exactly one of `url` (Streamable HTTP) or `command` (stdio). Tools are exposed to clients as `{name}__{tool}`. `users` restricts an upstream to those users; omit it for a global upstream. With `oauth`, each user links their own account in the portal (see [usage](usage.md#upstream-oauth)).
+Each upstream has exactly one of `url` (Streamable HTTP) or `command` (stdio). Tools are exposed to clients as `{name}__{tool}`. `users` restricts an upstream to those users; omit it for a global upstream. With `oauth`, each user links their own account in the portal (see [usage](usage.md#upstream-oauth)). A query string in `oauth.authorize_url` (e.g. a tenant or policy parameter) is kept; the proxy's own authorization parameters replace any of the same name.
 
 ## Client-facing OAuth
 

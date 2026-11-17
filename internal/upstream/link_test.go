@@ -85,3 +85,31 @@ func TestBeginLinkWithoutOAuth(t *testing.T) {
 		t.Fatal("want error for upstream without oauth")
 	}
 }
+
+func TestBeginLinkKeepsTheAuthorizeURLsQuery(t *testing.T) {
+	u := NewFromConfig(config.UpstreamConfig{Name: "b2c", URL: linkResource, OAuth: &config.UpstreamOAuthConfig{
+		AuthorizeURL: "https://idp/authorize?p=signin&client_id=wrong", ClientID: linkClientID,
+	}}, nil, nil, nil)
+	req, err := u.BeginLink("https://x/cb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authz, err := url.Parse(req.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := authz.Query()
+	if authz.Path != "/authorize" || q.Get("p") != "signin" || q["client_id"][0] != linkClientID ||
+		len(q["client_id"]) != 1 || q.Get("response_type") != "code" {
+		t.Fatalf("an existing query must be merged, ours winning: %s", req.URL)
+	}
+}
+
+func TestBeginLinkRejectsAMalformedAuthorizeURL(t *testing.T) {
+	u := NewFromConfig(config.UpstreamConfig{Name: "bad", URL: linkResource, OAuth: &config.UpstreamOAuthConfig{
+		AuthorizeURL: "https://idp/%zz", ClientID: linkClientID,
+	}}, nil, nil, nil)
+	if _, err := u.BeginLink("https://x/cb"); err == nil {
+		t.Fatal("a malformed authorize_url must fail")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -113,19 +114,29 @@ func runKeyCreate(cmd *cobra.Command, label, ups string, ttl time.Duration, user
 		"upstreams":    strings.Join(names, ","),
 		"session_ttl":  ttl.String(),
 	}
+	if err := printKey(cmd.OutOrStdout(), out, asJSON); err != nil {
+		return fmt.Errorf("key %s is stored but its token could not be shown; revoke it with \"key revoke %s\": %w",
+			key.ID, key.ID, err)
+	}
+	return nil
+}
+
+func printKey(w io.Writer, out map[string]string, asJSON bool) error {
 	if asJSON {
-		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(out)
 	}
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created key %s (%s)\n", key.ID, key.Label)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Token (shown once): %s\n", token)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "MCP endpoint:      %s   (recommended, with the header below)\n", endpoint)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Header:            Authorization: Bearer %s\n", token)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "URL-only clients:  %s   (token in the URL; may end up in logs)\n", mcpURL)
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Upstreams:         %s\n", strings.Join(names, ","))
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Session TTL:       %s\n", ttl)
-	return nil
+	_, err := fmt.Fprintf(w, `Created key %s (%s)
+Token (shown once): %s
+MCP endpoint:      %s   (recommended, with the header below)
+Header:            %s
+URL-only clients:  %s   (token in the URL; may end up in logs)
+Upstreams:         %s
+Session TTL:       %s
+`, out["id"], out["label"], out["token"], out["mcp_endpoint"], out["bearer"],
+		out["mcp_url"], out["upstreams"], out["session_ttl"])
+	return err
 }
 
 func upstreamAllowed(cfg *config.Config, username, name string) bool {

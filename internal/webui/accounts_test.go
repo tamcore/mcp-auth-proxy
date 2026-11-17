@@ -93,3 +93,19 @@ func TestFullCeremonyMapDropsTheOldestInsteadOfRefusing(t *testing.T) {
 		t.Fatalf("the oldest ceremony must make room: %d entries", len(c.m))
 	}
 }
+
+func TestLoginFloodCannotEvictARegistration(t *testing.T) {
+	c := &ceremonies{m: map[string]ceremony{}}
+	c.m["reg"] = ceremony{userID: "u1", deadline: time.Now().Add(time.Second)}
+	for range maxCeremonies + 5 {
+		if err := c.start(httptest.NewRecorder(), &webauthn.SessionData{}, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := c.m["reg"]; !ok {
+		t.Fatal("login ceremonies must not evict a registration ceremony")
+	}
+	if len(c.m) != maxCeremonies+1 {
+		t.Fatalf("login ceremonies must stay capped: %d entries", len(c.m))
+	}
+}

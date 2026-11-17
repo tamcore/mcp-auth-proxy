@@ -50,3 +50,20 @@ func TestExistingSignSecretIsTightened(t *testing.T) {
 		t.Fatalf("a readable signing secret lets other local users forge approvals: %v", err)
 	}
 }
+
+func TestSignSecretRefusesASymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "elsewhere")
+	if err := os.WriteFile(target, []byte(strings.Repeat("a", 64)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, SignSecretFile)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureSignSecret(dir); err == nil {
+		t.Fatal("a symlinked signing secret must be refused")
+	}
+	if fi, _ := os.Stat(target); fi.Mode().Perm() != 0o644 {
+		t.Fatalf("the symlink target must stay untouched: %v", fi.Mode())
+	}
+}

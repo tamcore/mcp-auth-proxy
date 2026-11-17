@@ -28,7 +28,7 @@ Codes can also go **directly to browsers and phones** via Web Push, in addition 
 
 ## Settings and passkeys
 
-Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed; the authenticator must verify the user with a PIN or biometric). Logging out ends every web session of the user, on all devices. Five failed password logins in a row lock that username for a minute. All unknown usernames share one such lock, so trying random names does not get around it. The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
+Under **Settings** (`/settings`) users change their password (all their other browser sessions are logged out), manage **passkeys** (add, see last use, delete) and set their push target. The login page offers "Sign in with a passkey" (discoverable credentials, no username needed; the authenticator must verify the user with a PIN or biometric). Logging out ends every web session of the user, on all devices. Five failed password logins in a row lock that username for a minute, whether or not the user exists, so the responses do not reveal which usernames exist. The passkey relying party is derived from `base_url`: its host is the RP ID, so `base_url` must use https and a host name, and must not change once passkeys exist.
 
 ## The OTP contract (what your AI client sees)
 

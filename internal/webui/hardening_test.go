@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
@@ -63,26 +65,55 @@ func TestRepeatedFailedLoginsLockTheUser(t *testing.T) {
 	}
 }
 
-func TestRotatingUnknownUsernamesAreLockedWithoutLockingRealUsers(t *testing.T) {
+func TestUnknownAndRealUsernamesFailAlike(t *testing.T) {
 	st, ts := newTestUI(t)
 	seedUser(t, st, testAlice, "pw")
-	post := func(user, pw string) int {
-		resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, pwField: {pw}})
-		if err != nil {
-			t.Fatal(err)
+	sequence := func(user string) string {
+		codes := make([]string, 0, maxFailedLogins+1)
+		for range maxFailedLogins + 1 {
+			resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, pwField: {"wrong"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			codes = append(codes, fmt.Sprint(resp.StatusCode))
 		}
-		_ = resp.Body.Close()
-		return resp.StatusCode
+		return strings.Join(codes, ",")
 	}
-	for i := range maxFailedLogins {
-		if code := post(fmt.Sprintf("nobody%d", i), "x"); code != http.StatusUnauthorized {
-			t.Fatalf("unknown user: %d", code)
+	want := sequence(testAlice)
+	for _, name := range []string{"ghost", "ghost2"} {
+		if got := sequence(name); got != want {
+			t.Fatalf("%s: %s, real user: %s; the responses reveal which names exist", name, got, want)
 		}
 	}
-	if code := post("nobody-new", "x"); code != http.StatusTooManyRequests {
-		t.Fatalf("a fresh unknown username must not escape the lock: %d, want 429", code)
+}
+
+func TestConcurrentWrongLoginsStayWithinTheLimit(t *testing.T) {
+	st, ts := newTestUI(t)
+	seedUser(t, st, testAlice, "pw")
+	const tries = 20
+	codes := make(chan int, tries)
+	var wg sync.WaitGroup
+	for range tries {
+		wg.Go(func() {
+			resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {testAlice}, pwField: {"wrong"}})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_ = resp.Body.Close()
+			codes <- resp.StatusCode
+		})
 	}
-	if code := post(testAlice, "pw"); code != http.StatusFound {
-		t.Fatalf("unknown-user failures must not lock a real user: %d", code)
+	wg.Wait()
+	close(codes)
+	passed := 0
+	for c := range codes {
+		if c != http.StatusTooManyRequests {
+			passed++
+		}
+	}
+	if passed > maxFailedLogins {
+		t.Fatalf("%d concurrent wrong passwords were checked, limit is %d", passed, maxFailedLogins)
 	}
 }

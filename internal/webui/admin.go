@@ -84,6 +84,19 @@ func (ui *WebUI) renderAdmin(w http.ResponseWriter, r *http.Request, admin *stor
 		http.Error(w, "could not list users", http.StatusInternalServerError)
 		return
 	}
-	data := view.AdminData{Users: users, Invite: invite, Error: errMsg}
+	stats, err := ui.store.ActivityStats(r.Context(), time.Now().UTC())
+	if err != nil {
+		ui.logger.Error("activity stats", "error", err)
+		http.Error(w, "could not load activity", http.StatusInternalServerError)
+		return
+	}
+	activity := make(map[string]store.ActivityStat, len(stats.Users))
+	for id, s := range stats.Users {
+		activity[id] = *s
+	}
+	data := view.AdminData{Users: users, Invite: invite, Error: errMsg, Activity: activity, Total: stats.Total}
+	if ui.cfg.Audit.Enabled {
+		data.Retention = formatTTL(ui.cfg.Audit.Retention)
+	}
 	ui.pages.Render(w, status, "admin", page("Admin", admin, data))
 }

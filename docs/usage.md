@@ -4,7 +4,7 @@
 
 The instance is multi-user. Usernames are declared in the config (`users:`); admins only via `admins:`. A configured user missing from the database is created on start with a **single-use invite link** (`{base_url}/invite/{token}`, logged on every start until used) through which they set their own password — no passwords are handed over in plaintext. Only the newest link per user is valid, invite tokens are stored as hashes only, and links never appear in the web UI except once, right after an admin mints one.
 
-Admins (`/admin`) can temporarily disable users (their keys stop working immediately), see which users still have an invite pending, and mint new invite links.
+Admins (`/admin`) can temporarily disable users (their keys stop working immediately), see which users still have an invite pending, and mint new invite links. The page also shows activity for the instance and per user: last active, last successful tool call, last granted and denied authorization, tool calls (audit log entries, so within `audit.retention`), granted/denied/expired authorization counts, pending requests, and active/revoked keys. The values come from the database and survive restarts.
 
 ## Web portal
 

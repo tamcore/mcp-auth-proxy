@@ -52,4 +52,60 @@
   </div>
   <p class="muted border-t border-slate-200 px-5 py-4 sm:px-6 dark:border-slate-700">Admins are toggled only in the config file (<code class="font-mono">admins</code> list). A disabled user cannot log in and their API keys stop working immediately.</p>
 </section>
+<section class="card" aria-labelledby="activity" data-testid="activity-total">
+  <h2 id="activity" class="card-title">Activity</h2>
+  {{with .Total}}
+  <dl class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {{template "stat" (list "Users" (printf "%d" (len $.Data.Users)) "stat-users")}}
+    {{template "stat" (list "Active keys" (printf "%d" .ActiveKeys) "stat-active-keys")}}
+    {{template "stat" (list (toolCallsLabel $.Data.Retention) (toolCalls $.Data.Retention .ToolCalls) "stat-tool-calls")}}
+    {{template "stat" (list "Pending now" (printf "%d" .Pending) "stat-pending")}}
+    {{template "stat" (list "Granted" (printf "%d" .Granted) "stat-granted")}}
+    {{template "stat" (list "Denied" (printf "%d" .Denied) "stat-denied")}}
+    {{template "stat" (list "Expired" (printf "%d" .Expired) "stat-expired")}}
+    {{template "stat" (list "Last active" (when .LastActive) "stat-last-active")}}
+  </dl>
+  {{end}}
+</section>
+<section class="card p-0 sm:p-0" aria-labelledby="per-user">
+  <h2 id="per-user" class="card-title px-5 pt-5 sm:px-6 sm:pt-6">Activity per user</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-left text-sm">
+      <thead class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <tr class="border-b border-slate-200 dark:border-slate-700">
+          <th scope="col" class="px-5 py-3 font-medium sm:px-6">User</th>
+          <th scope="col" class="px-5 py-3 font-medium">Last active</th>
+          <th scope="col" class="px-5 py-3 font-medium">Last tool call</th>
+          <th scope="col" class="px-5 py-3 font-medium">Last granted</th>
+          <th scope="col" class="px-5 py-3 font-medium">Last denied</th>
+          <th scope="col" class="px-5 py-3 font-medium">{{toolCallsLabel .Retention}}</th>
+          <th scope="col" class="px-5 py-3 font-medium">Granted / denied / expired</th>
+          <th scope="col" class="px-5 py-3 font-medium">Keys active / revoked</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+        {{range .Users}}{{$s := index $.Data.Activity .ID}}
+        <tr data-testid="activity-{{.Username}}">
+          <td class="px-5 py-3 font-medium sm:px-6">{{.Username}}</td>
+          <td class="whitespace-nowrap px-5 py-3">{{when $s.LastActive}}</td>
+          <td class="whitespace-nowrap px-5 py-3">{{when $s.LastToolCall}}</td>
+          <td class="whitespace-nowrap px-5 py-3">{{when $s.LastGranted}}</td>
+          <td class="whitespace-nowrap px-5 py-3">{{when $s.LastDenied}}</td>
+          <td class="px-5 py-3 tabular-nums">{{toolCalls $.Data.Retention $s.ToolCalls}}</td>
+          <td class="px-5 py-3 tabular-nums">{{$s.Granted}} / {{$s.Denied}} / {{$s.Expired}}{{if $s.Pending}} <span class="badge-accent">{{$s.Pending}} pending</span>{{end}}</td>
+          <td class="px-5 py-3 tabular-nums">{{$s.ActiveKeys}} / {{$s.RevokedKeys}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted border-t border-slate-200 px-5 py-4 sm:px-6 dark:border-slate-700">Last active is the last request with any of the user's keys; last tool call is the last successful one. Auth counts include every one-time-code request since the key was created; granted and denied times are request times. Totals above also count keys without an owner.</p>
+</section>
 {{end}}{{end}}
+
+{{define "stat"}}
+<div class="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-900/40">
+  <dt class="muted text-xs">{{index . 0}}</dt>
+  <dd class="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="{{index . 2}}">{{index . 1}}</dd>
+</div>
+{{end}}

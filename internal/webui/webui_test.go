@@ -445,3 +445,49 @@ func assertNewKeyBanner(t *testing.T, body string) {
 		}
 	}
 }
+
+func TestAdminShowsActivity(t *testing.T) {
+	st, ts := newTestUI(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	hash, err := store.HashPassword("pw-alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateUser(ctx, &store.User{ID: "u_admin", Username: testAlice, PasswordHash: hash, Admin: true,
+		CreatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	bob := seedUser(t, st, testBob, "pw-bob")
+	key := &store.Key{ID: "k_bob", Kind: store.KeyKindStatic, Label: "bob-cli", SecretHash: "h_bob",
+		Upstreams: []string{testEcho}, CreatedAt: now, UserID: &bob.ID}
+	if err := st.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.MarkKeyUsed(ctx, key.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a1", "a2"} {
+		if err := st.AppendAudit(ctx, &store.AuditEntry{ID: id, UserID: bob.ID, KeyID: key.ID, KeyLabel: key.Label,
+			ToolName: "echo__say", CreatedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin", nil)
+	req.AddCookie(login(t, ts, testAlice, "pw-alice"))
+	resp, err := noRedirectClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	body := string(b)
+	for _, want := range []string{
+		`data-testid="activity-total"`, `data-testid="stat-tool-calls">2<`, `data-testid="stat-active-keys">1<`,
+		`data-testid="activity-` + bob.Username + `"`, "Tool calls (last 720h)",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("admin page lacks %q", want)
+		}
+	}
+}

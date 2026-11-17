@@ -25,12 +25,16 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
-	if !ui.logins.allowed(username) {
+	user, err := ui.store.UserByName(r.Context(), username)
+	limitKey := username
+	if err != nil {
+		limitKey = unknownUsersKey
+	}
+	if !ui.logins.allowed(limitKey) {
 		ui.logger.Warn("login refused: too many failures", "user", username, "remote", r.RemoteAddr)
 		ui.loginFailed(w, r, http.StatusTooManyRequests, "Too many failed logins. Try again in a minute.")
 		return
 	}
-	user, err := ui.store.UserByName(r.Context(), username)
 	hash := ""
 	if err == nil {
 		hash = user.PasswordHash
@@ -42,9 +46,7 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 		ui.logger.Warn("failed login", "user", username, "remote", r.RemoteAddr)
 	}
 	if !ok || user.Disabled {
-		if err == nil {
-			ui.logins.fail(username)
-		}
+		ui.logins.fail(limitKey)
 		ui.loginFailed(w, r, http.StatusUnauthorized, "Wrong username or password.")
 		return
 	}

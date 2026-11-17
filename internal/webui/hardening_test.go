@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -59,5 +60,29 @@ func TestRepeatedFailedLoginsLockTheUser(t *testing.T) {
 	}
 	if code := post("pw"); code != http.StatusTooManyRequests {
 		t.Fatalf("locked user logged in with status %d, want 429", code)
+	}
+}
+
+func TestRotatingUnknownUsernamesAreLockedWithoutLockingRealUsers(t *testing.T) {
+	st, ts := newTestUI(t)
+	seedUser(t, st, testAlice, "pw")
+	post := func(user, pw string) int {
+		resp, err := noRedirectClient().PostForm(ts.URL+"/login", url.Values{userField: {user}, pwField: {pw}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	for i := range maxFailedLogins {
+		if code := post(fmt.Sprintf("nobody%d", i), "x"); code != http.StatusUnauthorized {
+			t.Fatalf("unknown user: %d", code)
+		}
+	}
+	if code := post("nobody-new", "x"); code != http.StatusTooManyRequests {
+		t.Fatalf("a fresh unknown username must not escape the lock: %d, want 429", code)
+	}
+	if code := post(testAlice, "pw"); code != http.StatusFound {
+		t.Fatalf("unknown-user failures must not lock a real user: %d", code)
 	}
 }

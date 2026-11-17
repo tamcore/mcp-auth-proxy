@@ -8,12 +8,15 @@ import (
 const (
 	maxFailedLogins = 5
 	loginLockout    = time.Minute
+	// unknownUsersKey is the one shared entry for all unknown usernames; the
+	// NUL byte keeps it apart from every real username.
+	unknownUsersKey = "\x00unknown"
 )
 
 // loginLimiter locks a username for a minute after maxFailedLogins failures in
-// a row; every further failure locks it again. Only known users are tracked,
-// so the map is bounded by the user count.
-// ponytail: per username only; a password spray across many users is slowed by bcrypt alone.
+// a row; every further failure locks it again. Unknown usernames share one
+// entry, so rotating names neither escapes the lock nor grows the map: it is
+// bounded by the user count plus one.
 type loginLimiter struct {
 	mu     sync.Mutex
 	failed map[string]failedLogins

@@ -173,8 +173,10 @@ func (r *Renderer) ServiceWorker() http.Handler {
 func (r *Renderer) TouchIcon() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		a := r.assets["icon-180.png"]
+		sum := sha256.Sum256(a.body)
 		w.Header().Set("Content-Type", a.ctype)
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", `"`+hex.EncodeToString(sum[:8])+`"`)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(a.body))
 	})

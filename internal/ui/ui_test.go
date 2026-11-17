@@ -173,7 +173,7 @@ func TestRootAssetHandlers(t *testing.T) {
 		prefix string
 	}{
 		"sw.js":     {r.ServiceWorker(), "javascript", "no-cache", ""},
-		"touchicon": {r.TouchIcon(), "image/png", "max-age=86400", "\x89PNG"},
+		"touchicon": {r.TouchIcon(), "image/png", "no-cache", "\x89PNG"},
 	} {
 		rec := httptest.NewRecorder()
 		tc.h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

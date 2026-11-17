@@ -27,7 +27,7 @@ type toolInfo struct {
 // before it is stored, so the proxy never talks to a non-MCP URL (metadata
 // service, internal admin page) on a user's behalf.
 func (ui *WebUI) probeMCP(ctx context.Context, own *store.UserUpstream) error {
-	u := upstream.NewFromConfig(own.Config(), ui.store, nil, ui.logger)
+	u := upstream.NewFromConfig(own.Config(), ui.store, ui.egress, ui.logger)
 	defer func() { _ = u.Close() }()
 	ctx, cancel := context.WithTimeout(ctx, toolsTimeout)
 	defer cancel()
@@ -46,7 +46,7 @@ func (ui *WebUI) upstreamsChanged(userID string) {
 func (ui *WebUI) userUpstream(ctx context.Context, user *store.User, name string) (*upstream.Upstream, bool) {
 	for _, own := range ui.ownUpstreamsCtx(ctx, user.ID) {
 		if own.Name == name {
-			return upstream.NewFromConfig(own.Config(), ui.store, nil, ui.logger), true
+			return upstream.NewFromConfig(own.Config(), ui.store, ui.egress, ui.logger), true
 		}
 	}
 	for _, c := range ui.allowedUpstreams(user.Username) {

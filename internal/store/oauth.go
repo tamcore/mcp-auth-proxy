@@ -38,9 +38,10 @@ ON CONFLICT (client_id) DO UPDATE SET name = excluded.name,
 	return nil
 }
 
-// PruneOAuthClients deletes every client not in keep, and every access token
-// issued to such a client, so a client removed from config stops working.
-func (s *Store) PruneOAuthClients(ctx context.Context, keep []string) error {
+// PruneOAuthClients deletes every client not in keep and the access tokens
+// issued to it, and revokes the identity keys those tokens belong to, so a
+// client removed from config stops working.
+func (s *Store) PruneOAuthClients(ctx context.Context, keep []string, at time.Time) error {
 	ids, err := json.Marshal(keep)
 	if err != nil {
 		return fmt.Errorf("store: marshal client ids: %w", err)
@@ -50,11 +51,15 @@ func (s *Store) PruneOAuthClients(ctx context.Context, keep []string) error {
 		return fmt.Errorf("store: prune oauth clients: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	const staleKeys = `SELECT key_id FROM access_tokens WHERE client_id NOT IN (SELECT value FROM json_each(?1))`
 	for _, q := range []string{
-		`DELETE FROM access_tokens WHERE client_id NOT IN (SELECT value FROM json_each(?))`,
-		`DELETE FROM oauth_clients WHERE client_id NOT IN (SELECT value FROM json_each(?))`,
+		`UPDATE keys SET revoked_at = ?2 WHERE kind = 'oauth' AND revoked_at IS NULL AND id IN (` + staleKeys + `)`,
+		`DELETE FROM sessions WHERE key_id IN (` + staleKeys + `)`,
+		`UPDATE challenges SET status = 'exhausted' WHERE status = 'pending' AND key_id IN (` + staleKeys + `)`,
+		`DELETE FROM access_tokens WHERE client_id NOT IN (SELECT value FROM json_each(?1))`,
+		`DELETE FROM oauth_clients WHERE client_id NOT IN (SELECT value FROM json_each(?1))`,
 	} {
-		if _, err := tx.ExecContext(ctx, q, string(ids)); err != nil {
+		if _, err := tx.ExecContext(ctx, q, string(ids), FormatTime(at)); err != nil {
 			return fmt.Errorf("store: prune oauth clients: %w", err)
 		}
 	}

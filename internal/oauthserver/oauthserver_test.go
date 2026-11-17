@@ -330,6 +330,10 @@ func TestClientRemovedFromConfigIsPrunedWithItsTokens(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, _ := resp["access_token"].(string)
+	at, err := s.store.AccessTokenByHash(ctx, store.HashSecret(tok), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := testConfig()
 	cfg.OAuth.Clients[0].ClientID = "other"
@@ -347,5 +351,8 @@ func TestClientRemovedFromConfigIsPrunedWithItsTokens(t *testing.T) {
 	}
 	if _, err := s.store.OAuthClientByID(ctx, "other"); err != nil {
 		t.Fatalf("configured client must stay: %v", err)
+	}
+	if k, err := s.store.KeyByID(ctx, at.KeyID); err != nil || !k.Revoked() {
+		t.Fatalf("identity key of removed client must be revoked, not deleted: %+v %v", k, err)
 	}
 }

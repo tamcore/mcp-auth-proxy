@@ -62,7 +62,8 @@ type Server struct {
 }
 
 // New builds the AS. The store's clients are synced to config: configured ones
-// are upserted, all others are removed with their access tokens.
+// are upserted, all others are removed with their access tokens, and their
+// identity keys are revoked.
 func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Renderer,
 	logger *slog.Logger) (*Server, error) {
 	s := &Server{
@@ -88,7 +89,7 @@ func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Ren
 			return nil, err
 		}
 	}
-	if err := st.PruneOAuthClients(ctx, keep); err != nil {
+	if err := st.PruneOAuthClients(ctx, keep, s.now()); err != nil {
 		return nil, err
 	}
 	return s, nil

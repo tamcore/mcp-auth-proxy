@@ -49,9 +49,10 @@ const (
 	// maxLabelRunes cuts user-chosen label values (key labels, names) short.
 	maxLabelRunes = 64
 	// maxToolSeries caps distinct upstream/tool pairs: a user's own upstream
-	// could rename its tools endlessly. Further pairs count as tool "other".
+	// could rename its tools endlessly, and users can add upstreams under new
+	// names. Further pairs count as upstream "other", tool "other".
 	maxToolSeries = 500
-	otherTool     = "other"
+	otherLabel    = "other"
 	// unknownUser marks an owned key whose owner could not be read, so it is
 	// not mistaken for a key without an owner (user "").
 	unknownUser = "unknown"
@@ -162,26 +163,27 @@ func (m *Metrics) Handler() http.Handler {
 // ToolCall counts one proxied tool call; took is observed only for calls that
 // reached the upstream (took > 0).
 func (m *Metrics) ToolCall(w Who, upstream, tool, outcome string, took time.Duration) {
-	upstream, tool = clean(upstream), m.toolLabel(clean(upstream), clean(tool))
+	upstream, tool = m.toolLabels(clean(upstream), clean(tool))
 	m.toolCalls.WithLabelValues(w.User, w.Key, upstream, tool, outcome).Inc()
 	if took > 0 {
 		m.toolDuration.WithLabelValues(upstream, tool).Observe(took.Seconds())
 	}
 }
 
-// toolLabel returns tool, or "other" once maxToolSeries pairs are in use.
-func (m *Metrics) toolLabel(upstream, tool string) string {
+// toolLabels returns upstream and tool, or "other" for both once
+// maxToolSeries pairs are in use.
+func (m *Metrics) toolLabels(upstream, tool string) (string, string) {
 	k := upstream + "\x00" + tool
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.tools[k] {
-		return tool
+		return upstream, tool
 	}
 	if len(m.tools) >= maxToolSeries {
-		return otherTool
+		return otherLabel, otherLabel
 	}
 	m.tools[k] = true
-	return tool
+	return upstream, tool
 }
 
 // Auth counts one auth tool call.

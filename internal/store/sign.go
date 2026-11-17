@@ -15,13 +15,10 @@ const SignSecretFile = "sign.secret"
 // creating {state_dir}/sign.secret with mode 0600 if absent.
 func EnsureSignSecret(stateDir string) ([]byte, error) {
 	path := filepath.Join(stateDir, SignSecretFile)
-	b, err := os.ReadFile(path)
+	b, err := ReadOwnerOnly(path)
 	if err == nil {
 		if len(b) < 32 {
 			return nil, fmt.Errorf("store: %s is too short (%d bytes); refusing to use it as a signing secret", path, len(b))
-		}
-		if err := os.Chmod(path, 0o600); err != nil {
-			return nil, fmt.Errorf("store: restrict %s: %w", path, err)
 		}
 		return b, nil
 	}

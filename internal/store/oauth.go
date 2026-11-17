@@ -38,6 +38,29 @@ ON CONFLICT (client_id) DO UPDATE SET name = excluded.name,
 	return nil
 }
 
+// PruneOAuthClients deletes every client not in keep, and every access token
+// issued to such a client, so a client removed from config stops working.
+func (s *Store) PruneOAuthClients(ctx context.Context, keep []string) error {
+	ids, err := json.Marshal(keep)
+	if err != nil {
+		return fmt.Errorf("store: marshal client ids: %w", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("store: prune oauth clients: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, q := range []string{
+		`DELETE FROM access_tokens WHERE client_id NOT IN (SELECT value FROM json_each(?))`,
+		`DELETE FROM oauth_clients WHERE client_id NOT IN (SELECT value FROM json_each(?))`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, string(ids)); err != nil {
+			return fmt.Errorf("store: prune oauth clients: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
 // OAuthClientByID loads a registered client.
 func (s *Store) OAuthClientByID(ctx context.Context, clientID string) (*OAuthClient, error) {
 	var c OAuthClient

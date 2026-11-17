@@ -316,3 +316,36 @@ func TestTokenRejectsMalformedVerifier(t *testing.T) {
 		})
 	}
 }
+
+func TestClientRemovedFromConfigIsPrunedWithItsTokens(t *testing.T) {
+	ctx := context.Background()
+	s := newTestServer(t)
+	code := consentAndGetCode(t, s, testVerifier)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(tokenForm(code, testVerifier).Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	s.HandleToken(rec, req)
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := resp["access_token"].(string)
+
+	cfg := testConfig()
+	cfg.OAuth.Clients[0].ClientID = "other"
+	s2, err := New(ctx, s.store, cfg, ui.New(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	s2.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+authorizeQuery("v").Encode(), nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("removed client must not authorize, got %d", rec.Code)
+	}
+	if _, err := s.store.AccessTokenByHash(ctx, store.HashSecret(tok), time.Now()); err != store.ErrNotFound {
+		t.Fatalf("token of removed client must be gone, got %v", err)
+	}
+	if _, err := s.store.OAuthClientByID(ctx, "other"); err != nil {
+		t.Fatalf("configured client must stay: %v", err)
+	}
+}

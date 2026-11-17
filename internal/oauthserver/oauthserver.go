@@ -61,7 +61,8 @@ type Server struct {
 	CurrentUser func(*http.Request) *store.User
 }
 
-// New builds the AS. Clients are seeded into the store from config.
+// New builds the AS. The store's clients are synced to config: configured ones
+// are upserted, all others are removed with their access tokens.
 func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Renderer,
 	logger *slog.Logger) (*Server, error) {
 	s := &Server{
@@ -73,7 +74,9 @@ func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Ren
 		pages:  pages,
 		codes:  map[string]*authCode{},
 	}
+	keep := make([]string, 0, len(cfg.OAuth.Clients))
 	for i := range cfg.OAuth.Clients {
+		keep = append(keep, cfg.OAuth.Clients[i].ClientID)
 		c := &store.OAuthClient{
 			ClientID:     cfg.OAuth.Clients[i].ClientID,
 			Name:         cfg.OAuth.Clients[i].Name,
@@ -84,6 +87,9 @@ func New(ctx context.Context, st *store.Store, cfg *config.Config, pages *ui.Ren
 		if err := st.UpsertOAuthClient(ctx, c); err != nil {
 			return nil, err
 		}
+	}
+	if err := st.PruneOAuthClients(ctx, keep); err != nil {
+		return nil, err
 	}
 	return s, nil
 }

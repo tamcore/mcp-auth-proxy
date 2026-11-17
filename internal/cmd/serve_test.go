@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -65,5 +68,35 @@ func TestASlowServerDoesNotDelayTheOthersShutdown(t *testing.T) {
 	}
 	if err := <-done; err == nil {
 		t.Fatal("the slow server's missed deadline must be reported")
+	}
+}
+
+func TestStateDirIsTightenedToOwnerOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := restrictStateDir(dir, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("state dir mode %04o, want 0700", perm)
+	}
+}
+
+func TestStateDirNotOwnedIsLoggedNotFatal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root owns everything")
+	}
+	var log bytes.Buffer
+	if err := restrictStateDir("/usr", slog.New(slog.NewTextHandler(&log, nil))); err != nil {
+		t.Fatalf("a volume root owned by someone else (fsGroup) must not stop start-up: %v", err)
+	}
+	if !strings.Contains(log.String(), "state dir") {
+		t.Fatalf("the open state dir must be logged: %q", log.String())
 	}
 }

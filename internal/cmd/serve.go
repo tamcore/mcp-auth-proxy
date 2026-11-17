@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,7 +65,7 @@ func runServe(cmd *cobra.Command) error {
 	for _, m := range st.MigrationsApplied() {
 		logger.Info("migration applied", "migration", m, "backup", st.MigrationBackup())
 	}
-	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
+	if err := restrictStateDir(cfg.StateDir, logger); err != nil {
 		return err
 	}
 	secret, err := store.EnsureSignSecret(cfg.StateDir)
@@ -115,6 +117,26 @@ func runServe(cmd *cobra.Command) error {
 	ops := newHTTPServer(cfg.OpsListenAddr, srv.OpsHandler())
 	logger.Info("starting", "addr", cfg.ListenAddr, "ops_addr", cfg.OpsListenAddr, "base_url", cfg.BaseURL)
 	return serveUntilDone(ctx, logger, shutdownGrace, app, ops)
+}
+
+// restrictStateDir tightens the state dir to 0700. A volume root this process
+// does not own (Kubernetes fsGroup) cannot be changed; its files stay 0600.
+func restrictStateDir(dir string, logger *slog.Logger) error {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return err
+	}
+	perm := fi.Mode().Perm()
+	if perm&0o077 == 0 {
+		return nil
+	}
+	err = os.Chmod(dir, 0o700)
+	if errors.Is(err, fs.ErrPermission) {
+		logger.Warn("state dir is open to group or others and not owned by this process; its files stay owner-only",
+			"dir", dir, "mode", fmt.Sprintf("%04o", perm))
+		return nil
+	}
+	return err
 }
 
 // newHTTPServer bounds how long a client may take to send a request and keep

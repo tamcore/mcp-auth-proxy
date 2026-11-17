@@ -42,7 +42,7 @@ Under **Settings** (`/settings`) users change their password (all their other br
 
    > Session authorized until 2025-01-01T20:00:00Z. Retry the tool call you were blocked on.
 
-5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h; per-key override in the portal or with `key create --ttl`).
+5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h; per-key override in the portal or with `key create --ttl`). To skip the code, use **Authorize now** on the key in the portal before the call; **End session** revokes the authorization early.
 
 Instead of the code you can tap **Approve** in the notification; the button URL is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is a 403. Opening the URL in a browser (GET) only shows a confirmation button; only the POST acts, so link previews cannot approve.
 

@@ -200,6 +200,29 @@ func (ui *WebUI) handleEndKeySession(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// handleAuthorizeKey grants one of the user's keys a session ahead of its
+// next tool call.
+func (ui *WebUI) handleAuthorizeKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	key, err := ui.store.KeyByID(r.Context(), r.PostForm.Get("id"))
+	if err != nil || key.UserID == nil || *key.UserID != user.ID || key.Revoked() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	expires, err := ui.approvals.Authorize(r.Context(), key)
+	if err != nil {
+		ui.logger.Error("authorize key", "key", key.ID, "error", err)
+		http.Error(w, "could not authorize key", http.StatusInternalServerError)
+		return
+	}
+	ui.logger.Info("key authorized from portal", "key", key.ID, "user", user.Username, "expires_at", expires)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 // handleDeleteKey removes one of the user's revoked keys; its audit history
 // stays.
 func (ui *WebUI) handleDeleteKey(w http.ResponseWriter, r *http.Request) {

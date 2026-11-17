@@ -14,7 +14,7 @@ const (
 	// maxPasswordChecks caps concurrent bcrypt comparisons in login.
 	maxPasswordChecks = 4
 	// maxLimiterKey caps the bytes of a name kept as a limiter key.
-	maxLimiterKey = 256
+	maxLimiterKey = 64
 )
 
 // limiterKey truncates a name; configured usernames are far shorter.

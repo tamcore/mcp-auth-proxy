@@ -10,7 +10,7 @@
 | `state_dir` | `./data` | holds `proxy.db`, `sign.secret` and `vapid.json` (each 0600; `sign.secret` and `vapid.json` must be regular files, a symlink is refused); `serve` creates or tightens the directory to 0700 before it opens anything in it, or logs a warning if it does not own it (e.g. a Kubernetes `fsGroup` volume root) |
 | `session_ttl` | `8h` | session lifetime after auth |
 | `otp.digits` / `expiry` / `attempts` / `renotify_floor` | `5` / `3m` / `3` / `30s` | OTP gate tuning |
-| `users` / `admins` | – | user names; the admin role is set only here |
+| `users` / `admins` | – | user names (at most 64 bytes, unique case-insensitively); the admin role is set only here |
 | `audit.enabled` / `log_responses` / `retention` | `true` / `false` / `720h` | per-user audit log of tool calls |
 | `upstreams[]` | – | `name` + exactly one of `url` / `command`, optional `users`, `headers`, `oauth` |
 | `oauth.token_ttl` | `24h` | `map_` access token lifetime (no refresh tokens in v1) |

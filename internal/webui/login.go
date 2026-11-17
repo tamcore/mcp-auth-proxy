@@ -27,7 +27,7 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.PostForm.Get("username")
 	password := r.PostForm.Get("password")
 	if !ui.logins.attempt(username) {
-		ui.logger.Warn("login refused: too many failures", "user", username, "remote", r.RemoteAddr)
+		ui.logger.Warn("login refused: too many failures", "user", limiterKey(username), "remote", r.RemoteAddr)
 		ui.loginFailed(w, r, http.StatusTooManyRequests, "Too many failed logins. Try again in a minute.")
 		return
 	}
@@ -42,9 +42,9 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil && user.Disabled {
-		ui.logger.Warn("login refused: user disabled", "user", username, "remote", r.RemoteAddr)
+		ui.logger.Warn("login refused: user disabled", "user", limiterKey(username), "remote", r.RemoteAddr)
 	} else if !ok {
-		ui.logger.Warn("failed login", "user", username, "remote", r.RemoteAddr)
+		ui.logger.Warn("failed login", "user", limiterKey(username), "remote", r.RemoteAddr)
 	}
 	if !ok || user.Disabled {
 		ui.loginFailed(w, r, http.StatusUnauthorized, "Wrong username or password.")
@@ -59,13 +59,29 @@ func (ui *WebUI) handleLogin(w http.ResponseWriter, r *http.Request) {
 // checkPassword runs bcrypt in one of maxPasswordChecks slots, so a login flood
 // cannot use all CPUs; checked is false when ctx ends while waiting.
 func (ui *WebUI) checkPassword(ctx context.Context, hash, password string) (ok, checked bool) {
+	checked = ui.bcryptSlot(ctx, func() { ok = store.CheckPassword(hash, password) })
+	return ok && checked, checked
+}
+
+// bcryptSlot runs f in one of the password-check slots; false if ctx ended
+// before a slot was free.
+func (ui *WebUI) bcryptSlot(ctx context.Context, f func()) bool {
 	select {
 	case ui.passwordChecks <- struct{}{}:
 	case <-ctx.Done():
-		return false, false
+		return false
 	}
 	defer func() { <-ui.passwordChecks }()
-	return store.CheckPassword(hash, password), true
+	f()
+	return true
+}
+
+// hashPassword hashes in a password-check slot; busy reports a timeout.
+func (ui *WebUI) hashPassword(ctx context.Context, pw string) (hash string, busy bool, err error) {
+	if !ui.bcryptSlot(ctx, func() { hash, err = store.HashPassword(pw) }) {
+		return "", true, nil
+	}
+	return hash, false, err
 }
 
 func (ui *WebUI) loginFailed(w http.ResponseWriter, r *http.Request, status int, msg string) {

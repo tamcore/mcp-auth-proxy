@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -165,5 +166,49 @@ func TestPasswordChangeUsesTheBcryptCap(t *testing.T) {
 	ui.handlePasswordChange(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("all bcrypt slots busy: want 503, got %d", rec.Code)
+	}
+}
+
+func TestInviteChecksTheTokenBeforeHashing(t *testing.T) {
+	st, _, _, ui := newTestWebUI(t)
+	u := seedUser(t, st, testBob, "pw")
+	token, err := st.CreateInvite(context.Background(), u.ID, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range cap(ui.passwordChecks) {
+		ui.passwordChecks <- struct{}{}
+	}
+	set := func(tok string) int {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		form := url.Values{pwField: {newPw}, pw2Field: {newPw}}
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/invite/"+tok, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.SetPathValue("token", tok)
+		rec := httptest.NewRecorder()
+		ui.handleInviteSet(rec, req)
+		return rec.Code
+	}
+	if code := set("bogus"); code != http.StatusNotFound {
+		t.Fatalf("unknown token must be refused before hashing: want 404, got %d", code)
+	}
+	if code := set(token); code != http.StatusServiceUnavailable {
+		t.Fatalf("hashing must take a bcrypt slot: want 503, got %d", code)
+	}
+}
+
+func TestLoginLogsAShortenedName(t *testing.T) {
+	_, ts, _, ui := newTestWebUI(t)
+	var buf strings.Builder
+	ui.logger = slog.New(slog.NewTextHandler(&buf, nil))
+	form := url.Values{userField: {strings.Repeat("x", 5000)}, pwField: {"x"}}
+	resp, err := noRedirectClient().PostForm(ts.URL+"/login", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if strings.Contains(buf.String(), strings.Repeat("x", maxLimiterKey+1)) {
+		t.Fatal("a failed login must not log the full attempted name")
 	}
 }

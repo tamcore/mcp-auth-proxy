@@ -275,6 +275,9 @@ func validateBaseURL(raw string) error {
 	return nil
 }
 
+// maxUsernameLen bounds usernames; the login limiter keys on at most 64 bytes.
+const maxUsernameLen = 64
+
 // validateUsers checks the users/admins lists and returns the user set.
 func validateUsers(users, admins []string) (map[string]bool, []error) {
 	userSet := map[string]bool{}
@@ -287,6 +290,9 @@ func validateUsers(users, admins []string) (map[string]bool, []error) {
 		if u == "" {
 			errs = append(errs, fmt.Errorf("config: users[%d] must not be empty", i))
 			continue
+		}
+		if len(u) > maxUsernameLen {
+			errs = append(errs, fmt.Errorf("config: users[%d] is longer than %d bytes", i, maxUsernameLen))
 		}
 		if userSet[u] || folded[strings.ToLower(u)] {
 			errs = append(errs, fmt.Errorf("config: duplicate user %q (names are compared case-insensitively)", u))

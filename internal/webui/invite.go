@@ -39,7 +39,16 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 		ui.renderInvite(w, http.StatusBadRequest, token, "Password must have at most 72 bytes.")
 		return
 	}
-	hash, err := store.HashPassword(pw)
+	// Check the token before bcrypt: this endpoint is unauthenticated.
+	if !ui.validInvite(r, token) {
+		http.Error(w, "invite link is invalid, expired, or already used", http.StatusNotFound)
+		return
+	}
+	hash, busy, err := ui.hashPassword(r.Context(), pw)
+	if busy {
+		http.Error(w, "busy, try again", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		http.Error(w, "could not set password", http.StatusInternalServerError)
 		return

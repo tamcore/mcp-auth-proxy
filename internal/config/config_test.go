@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -212,5 +213,11 @@ func TestBaseURLIsNormalized(t *testing.T) {
 			t.Fatalf("%s became %q: HSTS and Secure cookies need a lowercase https:// prefix, "+
 				"approve URLs need no trailing slash", raw, cfg.BaseURL)
 		}
+	}
+}
+
+func TestOverlongUsernameIsRejected(t *testing.T) {
+	if _, errs := validateUsers([]string{strings.Repeat("a", maxUsernameLen+1)}, nil); len(errs) == 0 {
+		t.Fatal("an overlong username must be rejected")
 	}
 }

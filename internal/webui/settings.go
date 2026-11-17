@@ -92,7 +92,11 @@ func (ui *WebUI) handlePasswordChange(w http.ResponseWriter, r *http.Request) {
 	// Cookies carry whole seconds: the cutoff is the next second, and this
 	// browser's new cookie is issued exactly at it.
 	cutoff := time.Unix(time.Now().Unix()+1, 0).UTC()
-	hash, err := store.HashPassword(pw)
+	hash, busy, err := ui.hashPassword(r.Context(), pw)
+	if busy {
+		http.Error(w, "busy, try again", http.StatusServiceUnavailable)
+		return
+	}
 	if err == nil {
 		err = ui.store.SetUserPassword(r.Context(), user.ID, hash, cutoff)
 	}

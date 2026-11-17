@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -214,6 +215,10 @@ func (ui *WebUI) handleAuthorizeKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires, err := ui.approvals.Authorize(r.Context(), key)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		ui.logger.Error("authorize key", "key", key.ID, "error", err)
 		http.Error(w, "could not authorize key", http.StatusInternalServerError)

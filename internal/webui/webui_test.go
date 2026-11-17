@@ -403,7 +403,7 @@ func adminFlow(t *testing.T, ts *httptest.Server, st *store.Store, ctx context.C
 	t.Helper()
 	client := noRedirectClient()
 	hash, _ := store.HashPassword("alice-pw")
-	if err := st.SetUserPassword(ctx, alice.ID, hash); err != nil {
+	if err := st.SetUserPassword(ctx, alice.ID, hash, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	aliceCookie := login(t, ts, testAlice, "alice-pw")

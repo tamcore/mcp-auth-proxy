@@ -65,9 +65,11 @@ INSERT INTO users (id, username, password_hash, admin, disabled, created_at) VAL
 	return nil
 }
 
-// SetUserPassword sets a user's password hash.
-func (s *Store) SetUserPassword(ctx context.Context, userID, hash string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hash, userID)
+// SetUserPassword sets a user's password hash and, in the same write, logs
+// out every web session issued before sessionsSince.
+func (s *Store) SetUserPassword(ctx context.Context, userID, hash string, sessionsSince time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, sessions_since = ? WHERE id = ?`,
+		hash, FormatTime(sessionsSince), userID)
 	if err != nil {
 		return fmt.Errorf("store: set password: %w", err)
 	}

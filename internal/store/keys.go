@@ -92,22 +92,26 @@ func (s *Store) ListKeys(ctx context.Context) ([]*Key, error) {
 	return out, rows.Err()
 }
 
-// RevokeKey sets revoked_at. It is idempotent.
+// RevokeKey sets revoked_at and kills the key's session and pending
+// challenge in one transaction. It is idempotent.
 func (s *Store) RevokeKey(ctx context.Context, id string, at time.Time) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
-		FormatTime(at), id)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
+		FormatTime(at), id); err != nil {
 		return fmt.Errorf("store: revoke key: %w", err)
 	}
-	// Revoking a key kills its session and pending challenge.
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE key_id = ?`, id); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE key_id = ?`, id); err != nil {
 		return fmt.Errorf("store: drop session on revoke: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE challenges SET status = 'exhausted' WHERE key_id = ? AND status = 'pending'`, id); err != nil {
 		return fmt.Errorf("store: supersede challenges on revoke: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // UpdateKeyUpstreams replaces the upstreams of a key the user owns.

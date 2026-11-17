@@ -43,7 +43,7 @@ func TestForgetUserDropsADeletedOwnUpstream(t *testing.T) {
 func TestOwnUpstreamsDialThroughTheEgressGuard(t *testing.T) {
 	ctx := context.Background()
 	p, _, _ := newTestProxy(t, echoUpstream(t).URL)
-	p.userClient = egress.New(nil).Client(0)
+	p.userClient = egress.New(egress.Allow{}).Client(0)
 	now := time.Now().UTC()
 	if err := p.store.CreateUser(ctx, &store.User{ID: ownerID, Username: "own", CreatedAt: now}); err != nil {
 		t.Fatal(err)

@@ -8,35 +8,54 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"regexp"
+	"strings"
 	"syscall"
 	"time"
 )
 
+// Allow opens destinations the guard would refuse: address prefixes, or
+// exact host names, which skip the address check whatever they resolve to.
+type Allow struct {
+	Prefixes []netip.Prefix
+	Hosts    map[string]bool
+}
+
 // Guard rejects dials to non-public addresses outside its allow list.
 type Guard struct {
-	allow []netip.Prefix
+	allow Allow
 }
 
-// New builds a guard; allow opens extra prefixes (e.g. a home network).
-func New(allow []netip.Prefix) *Guard { return &Guard{allow: allow} }
+// New builds a guard.
+func New(allow Allow) *Guard { return &Guard{allow: allow} }
 
-// Parse turns config CIDR strings into prefixes.
-func Parse(cidrs []string) ([]netip.Prefix, error) {
-	out := make([]netip.Prefix, 0, len(cidrs))
-	for _, s := range cidrs {
-		p, err := netip.ParsePrefix(s)
-		if err != nil {
-			return nil, fmt.Errorf("egress: %q is not a CIDR prefix", s)
+// The last label must start with a letter: resolvers read all-numeric or hex
+// forms such as 127.1 or 0x7f.1 as IPv4 addresses.
+var hostName = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z]([a-z0-9-]*[a-z0-9])?$`)
+
+// Parse turns config entries into an Allow: a CIDR prefix, or a host name.
+func Parse(entries []string) (Allow, error) {
+	a := Allow{Hosts: map[string]bool{}}
+	for _, s := range entries {
+		if p, err := netip.ParsePrefix(s); err == nil {
+			a.Prefixes = append(a.Prefixes, p.Masked())
+			continue
 		}
-		out = append(out, p.Masked())
+		h := normalizeHost(s)
+		if _, err := netip.ParseAddr(h); err == nil || !hostName.MatchString(h) {
+			return Allow{}, fmt.Errorf("egress: %q is neither a CIDR prefix nor a host name", s)
+		}
+		a.Hosts[h] = true
 	}
-	return out, nil
+	return a, nil
 }
+
+func normalizeHost(h string) string { return strings.TrimSuffix(strings.ToLower(h), ".") }
 
 // Allowed reports whether ip may be dialed.
 func (g *Guard) Allowed(ip netip.Addr) bool {
 	ip = ip.Unmap()
-	for _, p := range g.allow {
+	for _, p := range g.allow.Prefixes {
 		if p.Contains(ip) {
 			return true
 		}
@@ -74,7 +93,12 @@ func (g *Guard) Transport() *http.Transport {
 	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: g.control}
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
+	open := &net.Dialer{Timeout: d.Timeout, KeepAlive: d.KeepAlive}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// addr still carries the URL's host name here, before resolution.
+		if host, _, err := net.SplitHostPort(addr); err == nil && g.allow.Hosts[normalizeHost(host)] {
+			return open.DialContext(ctx, network, addr)
+		}
 		return d.DialContext(ctx, network, addr)
 	}
 	return t

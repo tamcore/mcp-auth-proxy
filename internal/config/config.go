@@ -6,7 +6,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -55,7 +54,7 @@ type Config struct {
 	Upstreams  []UpstreamConfig
 	OAuth      OAuthConfig
 	// EgressAllow opens non-public prefixes for user-controlled destinations.
-	EgressAllow []netip.Prefix
+	EgressAllow egress.Allow
 }
 
 // OTPConfig holds the one-time-code gate tuning.

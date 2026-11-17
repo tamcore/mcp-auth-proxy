@@ -21,8 +21,9 @@ state_dir: ./data
 session_ttl: 8h
 
 # Destinations that users control (own upstreams, ntfy servers, Web Push
-# endpoints) must resolve to public addresses. List CIDR prefixes here to open
-# private ones, e.g. a home network. Configured upstreams are not restricted.
+# endpoints) must resolve to public addresses. List CIDR prefixes or exact host
+# names here to open private ones, e.g. a home network or ntfy.example.com.
+# Configured upstreams are not restricted.
 egress_allow: []
 
 otp:

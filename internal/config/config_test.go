@@ -218,15 +218,17 @@ func TestBaseURLIsNormalized(t *testing.T) {
 func TestEgressAllowParsed(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "c.yaml")
-	body := "base_url: https://proxy.example\negress_allow: [192.168.1.0/24]\n"
+	body := "base_url: https://proxy.example\negress_allow: [192.168.1.0/24, ntfy.example.com]\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(path)
-	if err != nil || len(cfg.EgressAllow) != 1 || cfg.EgressAllow[0].String() != "192.168.1.0/24" {
+	if err != nil || len(cfg.EgressAllow.Prefixes) != 1 || cfg.EgressAllow.Prefixes[0].String() != "192.168.1.0/24" ||
+		!cfg.EgressAllow.Hosts["ntfy.example.com"] {
 		t.Fatalf("egress_allow: %v %v", cfg, err)
 	}
-	if err := os.WriteFile(path, []byte("base_url: https://proxy.example\negress_allow: [nope]\n"), 0o600); err != nil {
+	bad := "base_url: https://proxy.example\negress_allow: [\"*.example.com\"]\n"
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {

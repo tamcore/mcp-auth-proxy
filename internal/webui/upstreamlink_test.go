@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
+	"github.com/tamcore/mcp-auth-proxy/internal/egress"
 	"github.com/tamcore/mcp-auth-proxy/internal/store"
 )
 
@@ -168,7 +169,7 @@ func TestOwnUpstreamWithBearerToken(t *testing.T) {
 }
 
 func TestOwnUpstreamOnPrivateAddressIsRefused(t *testing.T) {
-	st, ts := newTestUI(t, func(c *config.Config) { c.EgressAllow = nil })
+	st, ts := newTestUI(t, func(c *config.Config) { c.EgressAllow = egress.Allow{} })
 	seedUser(t, st, testBob, linkPw)
 	bob := login(t, ts, testBob, linkPw)
 	form := url.Values{nameField: {"ha"}, urlField: {mcpUpstream(t, "")}}

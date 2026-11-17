@@ -88,7 +88,7 @@
       if (status) status.textContent = msg;
     };
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      say("This browser does not offer push notifications. On iPhone and iPad, add this site to the Home Screen first.");
+      say("This browser does not offer push notifications. On iPhone and iPad, add this site to the Home Screen first: Share, then Add to Home Screen.");
       return;
     }
     if ((await Notification.requestPermission()) !== "granted") {
@@ -104,6 +104,27 @@
     const { endpoint, keys } = sub.toJSON();
     await postJSON("/portal/push/subscribe", JSON.stringify({ endpoint, keys, label: deviceName() }));
     location.reload();
+  };
+
+  let installPrompt;
+  const showAll = (sel, on) => document.querySelectorAll(sel).forEach((el) => (el.hidden = !on));
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    showAll("[data-install]", true);
+  });
+  window.addEventListener("appinstalled", () => showAll("[data-install]", false));
+  // iOS has no install prompt; Web Push there needs the Home Screen app.
+  const iosHint = () => {
+    const ios = /iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+    showAll("[data-install-ios]", ios && !navigator.standalone && !("PushManager" in window));
+  };
+  const install = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    showAll("[data-install]", false);
   };
 
   const addPasskey = async () => {
@@ -192,6 +213,7 @@
   document.addEventListener("DOMContentLoaded", checkPasskeys);
   document.addEventListener("DOMContentLoaded", watchPending);
   document.addEventListener("DOMContentLoaded", apply);
+  document.addEventListener("DOMContentLoaded", iosHint);
   document.addEventListener("click", (e) => {
     const set = e.target.closest("[data-theme-set]");
     if (set) {
@@ -217,6 +239,10 @@
         const status = document.querySelector("[data-push-status]");
         if (status) status.textContent = `Push not enabled: ${err.message}`;
       });
+      return;
+    }
+    if (e.target.closest("[data-install]")) {
+      install();
       return;
     }
     const tools = e.target.closest("[data-tools]");

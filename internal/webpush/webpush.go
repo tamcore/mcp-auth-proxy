@@ -137,6 +137,7 @@ func (s *Sender) Push(ctx context.Context, userID string, p Payload) (int, error
 		switch {
 		case err == nil:
 			sent++
+			s.logger.Info("push sent", "user_id", userID, "subscription", sub.ID, "label", sub.Label)
 		case errors.Is(err, errGone):
 			s.logger.Info("push subscription gone; removed", "user_id", userID, "subscription", sub.ID)
 			if err := s.store.DeletePushSubscriptionByEndpoint(ctx, sub.Endpoint); err != nil {

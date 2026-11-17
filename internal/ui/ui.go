@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//go:embed assets/app.css assets/app.js assets/sw.js templates/*.tmpl
+//go:embed assets/app.css assets/app.js assets/sw.js assets/manifest.json assets/*.png templates/*.tmpl
 var files embed.FS
 
 // User is the logged-in user shown in the top bar.
@@ -60,7 +60,8 @@ func New(logger *slog.Logger) *Renderer {
 	}
 	r := &Renderer{pages: map[string]*template.Template{}, assets: map[string]asset{}, logger: logger}
 	versions := map[string]string{}
-	for _, name := range []string{"app.css", "app.js", "sw.js"} {
+	names := []string{"app.css", "app.js", "sw.js", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"}
+	for _, name := range names {
 		body, err := files.ReadFile("assets/" + name)
 		if err != nil {
 			panic(err)

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,7 +54,8 @@ func TestEveryPageRendersSelfContained(t *testing.T) {
 		if code != http.StatusOK {
 			t.Fatalf("%s: status %d: %s", name, code, body)
 		}
-		if !strings.Contains(body, `href="/static/app.css?v=`) || !strings.Contains(body, `src="/static/app.js?v=`) {
+		if !strings.Contains(body, `href="/static/app.css?v=`) || !strings.Contains(body, `src="/static/app.js?v=`) ||
+			!strings.Contains(body, `rel="manifest" href="/static/manifest.json?v=`) {
 			t.Fatalf("%s: same-origin assets missing", name)
 		}
 		if externalRef.MatchString(body) {
@@ -95,7 +97,8 @@ func TestRenderUnknownPage(t *testing.T) {
 func TestStatic(t *testing.T) {
 	srv := httptest.NewServer(New(nil).Static())
 	defer srv.Close()
-	for path, ctype := range map[string]string{"/static/app.css": "text/css", "/static/app.js": "javascript"} {
+	for path, ctype := range map[string]string{"/static/app.css": "text/css", "/static/app.js": "javascript",
+		"/static/manifest.json": "application/json", "/static/icon-192.png": "image/png"} {
 		resp, err := http.Get(srv.URL + path)
 		if err != nil {
 			t.Fatal(err)
@@ -135,6 +138,28 @@ func TestNavMarksCurrentSection(t *testing.T) {
 		_, body := render(t, r, page, Page{User: user, Data: map[string]any{}})
 		if !strings.Contains(body, want) || strings.Count(body, `aria-current="page"`) != 1 {
 			t.Fatalf("%s: want exactly one current link %q", page, want)
+		}
+	}
+}
+
+func TestManifestIconsAreServed(t *testing.T) {
+	r := New(nil)
+	var m struct {
+		StartURL string `json:"start_url"`
+		Display  string `json:"display"`
+		Icons    []struct {
+			Src string `json:"src"`
+		} `json:"icons"`
+	}
+	if err := json.Unmarshal(r.assets["manifest.json"].body, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.StartURL != "/" || m.Display != "standalone" || len(m.Icons) == 0 {
+		t.Fatalf("manifest: %+v", m)
+	}
+	for _, icon := range m.Icons {
+		if _, ok := r.assets[strings.TrimPrefix(icon.Src, "/static/")]; !ok {
+			t.Fatalf("manifest icon %s is not an embedded asset", icon.Src)
 		}
 	}
 }

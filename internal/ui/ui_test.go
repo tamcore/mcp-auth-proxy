@@ -163,3 +163,23 @@ func TestManifestIconsAreServed(t *testing.T) {
 		}
 	}
 }
+
+func TestRootAssetHandlers(t *testing.T) {
+	r := New(nil)
+	for name, tc := range map[string]struct {
+		h      http.Handler
+		ctype  string
+		cache  string
+		prefix string
+	}{
+		"sw.js":     {r.ServiceWorker(), "javascript", "no-cache", ""},
+		"touchicon": {r.TouchIcon(), "image/png", "max-age=86400", "\x89PNG"},
+	} {
+		rec := httptest.NewRecorder()
+		tc.h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Header().Get("Content-Type"), tc.ctype) ||
+			!strings.Contains(rec.Header().Get("Cache-Control"), tc.cache) || !strings.HasPrefix(rec.Body.String(), tc.prefix) {
+			t.Fatalf("%s: %d %v", name, rec.Code, rec.Header())
+		}
+	}
+}

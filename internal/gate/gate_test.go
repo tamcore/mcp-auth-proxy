@@ -303,3 +303,25 @@ func TestPendingCodeKeptInMemoryUntilExpiry(t *testing.T) {
 		t.Fatal("expired code must be gone")
 	}
 }
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("no entropy") }
+
+func TestDefaultsAndLateNotifier(t *testing.T) {
+	e := newTestEnv(t)
+	g := New(Options{Store: e.st, Digits: 5, Expiry: 3 * time.Minute, MaxAttempts: 3,
+		DefaultTTL: time.Hour, BaseURL: "http://proxy.local", SignSecret: []byte("0123456789abcdef0123456789abcdef")})
+	ntf := &fakeNotifier{}
+	g.SetNotifier(ntf)
+	if _, err := g.Block(context.Background(), e.key, "echo__echo"); err != nil {
+		t.Fatal(err)
+	}
+	ch := ntf.last()
+	if ch == nil || len(ch.ID) != 32 || len(ch.PendingOTP) != 5 {
+		t.Fatalf("default id/otp generators: %+v", ch)
+	}
+	if id := randomHex(failingReader{}, 16); id == "" {
+		t.Fatal("randomHex must fall back when the reader fails")
+	}
+}

@@ -88,6 +88,10 @@ func (s *Server) Handler() http.Handler {
 	s.webui.Register(mux)
 	mux.Handle("GET /static/", s.pages.Static())
 	mux.Handle("GET /sw.js", s.pages.ServiceWorker())
+	for _, p := range []string{"/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
+		"/apple-touch-icon-240x240.png", "/apple-touch-icon-240x240-precomposed.png", "/favicon.ico"} {
+		mux.Handle("GET "+p, s.pages.TouchIcon())
+	}
 	mux.HandleFunc("GET /oauth/authorize", s.requireLogin(s.as.HandleAuthorize))
 	mux.HandleFunc("POST /oauth/consent", s.requireLogin(s.as.HandleConsent))
 	mux.HandleFunc("POST /oauth/token", s.as.HandleToken)

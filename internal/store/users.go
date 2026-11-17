@@ -259,7 +259,8 @@ INSERT INTO invites (token_hash, user_id, created_at, expires_at) VALUES (?, ?, 
 
 // ConsumeInvite atomically marks the token used, sets the user's password
 // hash, and returns the user, or ErrNotFound for unknown/expired/used tokens.
-func (s *Store) ConsumeInvite(ctx context.Context, token, passwordHash string, now time.Time) (*User, error) {
+func (s *Store) ConsumeInvite(ctx context.Context, token, passwordHash string,
+	now, sessionsSince time.Time) (*User, error) {
 	hash := HashSecret(token)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -289,7 +290,8 @@ func (s *Store) ConsumeInvite(ctx context.Context, token, passwordHash string, n
 	if _, err := tx.ExecContext(ctx, q, FormatTime(now), hash); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, passwordHash, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ?, sessions_since = ? WHERE id = ?`,
+		passwordHash, FormatTime(sessionsSince), userID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {

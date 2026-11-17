@@ -44,12 +44,14 @@ func (ui *WebUI) handleInviteSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not set password", http.StatusInternalServerError)
 		return
 	}
-	user, err := ui.store.ConsumeInvite(r.Context(), token, hash, time.Now().UTC())
+	// A reset logs out older sessions; this browser's cookie is issued at the cutoff.
+	cutoff := time.Unix(time.Now().Unix()+1, 0).UTC()
+	user, err := ui.store.ConsumeInvite(r.Context(), token, hash, time.Now().UTC(), cutoff)
 	if err != nil {
 		http.Error(w, "invite link is invalid, expired, or already used", http.StatusNotFound)
 		return
 	}
-	ui.sessions.Set(w, ui.sessions.IssueFor(user))
+	ui.sessions.Set(w, ui.sessions.issueAt(user.Username, cutoff))
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

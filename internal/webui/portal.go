@@ -175,7 +175,11 @@ func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
+	if err := ui.store.RevokeKey(r.Context(), id, time.Now().UTC()); err != nil {
+		ui.logger.Error("revoke key", "key", id, "error", err)
+		http.Error(w, "could not revoke key", http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 

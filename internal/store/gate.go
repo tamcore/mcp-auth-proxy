@@ -66,7 +66,11 @@ ON CONFLICT (key_id) DO UPDATE SET created_at = excluded.created_at,
 	if err != nil {
 		return fmt.Errorf("store: upsert session: %w", err)
 	}
-	if n, err := res.RowsAffected(); err != nil || n == 0 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: upsert session: %w", err)
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
 	return nil

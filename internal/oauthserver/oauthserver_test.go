@@ -23,6 +23,7 @@ import (
 const (
 	testClientID = "claude"
 	testRedirect = "https://claude.ai/api/mcp/cb"
+	testVerifier = "test-verifier-0123456789-abcdefghijklmnopqrstuvwxyz"
 )
 
 func testConfig() *config.Config {
@@ -177,11 +178,19 @@ func TestAuthorizeFailClosedMatrix(t *testing.T) {
 	s := newTestServer(t)
 	base := authorizeQuery("v")
 	mutate := map[string]func(q url.Values){
-		"unknown client":  func(q url.Values) { q.Set("client_id", "nope") },
-		"bad redirect":    func(q url.Values) { q.Set("redirect_uri", "https://evil/cb") },
-		"plain pkce":      func(q url.Values) { q.Set("code_challenge_method", "plain") },
-		"missing method":  func(q url.Values) { q.Del("code_challenge_method") },
-		"missing chall":   func(q url.Values) { q.Del("code_challenge") },
+		"unknown client": func(q url.Values) { q.Set("client_id", "nope") },
+		"bad redirect":   func(q url.Values) { q.Set("redirect_uri", "https://evil/cb") },
+		"plain pkce":     func(q url.Values) { q.Set("code_challenge_method", "plain") },
+		"missing method": func(q url.Values) { q.Del("code_challenge_method") },
+		"missing chall":  func(q url.Values) { q.Del("code_challenge") },
+		"short chall":    func(q url.Values) { q.Set("code_challenge", "abc") },
+		"padded chall":   func(q url.Values) { q.Set("code_challenge", challengeS256("v")+"=") },
+		"non-canonical chall": func(q url.Values) {
+			q.Set("code_challenge", strings.Repeat("A", 42)+"B")
+		},
+		"non-b64url chall": func(q url.Values) {
+			q.Set("code_challenge", strings.Repeat("+", 43))
+		},
 		"wrong resp type": func(q url.Values) { q.Set("response_type", "token") },
 	}
 	for name, m := range mutate {
@@ -204,7 +213,7 @@ func TestAuthorizeFailClosedMatrix(t *testing.T) {
 
 func TestFullFlowIssuesToken(t *testing.T) {
 	s := newTestServer(t)
-	verifier := "test-verifier-123"
+	verifier := testVerifier
 	code := consentAndGetCode(t, s, verifier)
 	if code == "" {
 		t.Fatal("no code")
@@ -234,7 +243,7 @@ func TestFullFlowIssuesToken(t *testing.T) {
 
 func TestTokenEndpointFailClosed(t *testing.T) {
 	s := newTestServer(t)
-	verifier := "v-abc"
+	verifier := testVerifier
 	code := consentAndGetCode(t, s, verifier)
 	post := func(f url.Values) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -243,7 +252,7 @@ func TestTokenEndpointFailClosed(t *testing.T) {
 		s.HandleToken(rec, req)
 		return rec
 	}
-	if rec := post(tokenForm(code, "wrong-verifier")); rec.Code == http.StatusOK {
+	if rec := post(tokenForm(code, strings.Repeat("w", 43))); rec.Code == http.StatusOK {
 		t.Fatal("wrong verifier must fail")
 	}
 	// Reuse of the consumed code must fail (single-use): use a fresh code though,
@@ -288,5 +297,65 @@ func TestAuthorizeErrorsDoNotRevealWhichClientsExist(t *testing.T) {
 	wrongURI := describe(func(q url.Values) { q.Set("redirect_uri", "https://evil.example/cb") })
 	if unknown != wrongURI {
 		t.Fatalf("an unknown client and a wrong redirect_uri must look the same:\n%s\n%s", unknown, wrongURI)
+	}
+}
+
+func TestTokenRejectsMalformedVerifier(t *testing.T) {
+	s := newTestServer(t)
+	for name, verifier := range map[string]string{
+		"too short":    strings.Repeat("a", 42),
+		"too long":     strings.Repeat("a", 129),
+		"invalid char": strings.Repeat("a", 42) + "/",
+	} {
+		t.Run(name, func(t *testing.T) {
+			code := consentAndGetCode(t, s, verifier)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(tokenForm(code, verifier).Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			s.HandleToken(rec, req)
+			if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"invalid_request"`) {
+				t.Fatalf("want 400 invalid_request, got %d %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestClientRemovedFromConfigIsPrunedWithItsTokens(t *testing.T) {
+	ctx := context.Background()
+	s := newTestServer(t)
+	code := consentAndGetCode(t, s, testVerifier)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(tokenForm(code, testVerifier).Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	s.HandleToken(rec, req)
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	tok, _ := resp["access_token"].(string)
+	at, err := s.store.AccessTokenByHash(ctx, store.HashSecret(tok), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := testConfig()
+	cfg.OAuth.Clients[0].ClientID = "other"
+	s2, err := New(ctx, s.store, cfg, ui.New(nil), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	s2.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+authorizeQuery("v").Encode(), nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("removed client must not authorize, got %d", rec.Code)
+	}
+	if _, err := s.store.AccessTokenByHash(ctx, store.HashSecret(tok), time.Now()); err != store.ErrNotFound {
+		t.Fatalf("token of removed client must be gone, got %v", err)
+	}
+	if _, err := s.store.OAuthClientByID(ctx, "other"); err != nil {
+		t.Fatalf("configured client must stay: %v", err)
+	}
+	if k, err := s.store.KeyByID(ctx, at.KeyID); err != nil || !k.Revoked() {
+		t.Fatalf("identity key of removed client must be revoked, not deleted: %+v %v", k, err)
 	}
 }

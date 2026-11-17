@@ -151,3 +151,45 @@ func TestEndKeySession(t *testing.T) {
 		t.Fatal("ending the session must not revoke the key")
 	}
 }
+
+func TestAuthorizeKeyFromPortal(t *testing.T) {
+	st, ts := newLinkUI(t, "https://idp/token")
+	ctx := context.Background()
+	uid := linkUserID
+	now := time.Now().UTC()
+	key := &store.Key{ID: "k_pre", Kind: store.KeyKindStatic, Label: "pre", SecretHash: "h_pre",
+		Upstreams: []string{testEcho}, TTLSeconds: 600, CreatedAt: now, UserID: &uid}
+	if err := st.CreateKey(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	bob := login(t, ts, testBob, linkPw)
+	if !strings.Contains(portalBody(t, ts, bob), `action="/portal/key/authorize"`) {
+		t.Fatal("key must offer Authorize now")
+	}
+	authorize := func(cookie *http.Cookie) int {
+		code, _ := postForm(t, ts, cookie, "/portal/key/authorize", url.Values{"id": {key.ID}})
+		return code
+	}
+	if code := authorize(login(t, ts, testAlice, linkPw)); code != http.StatusNotFound {
+		t.Fatalf("foreign key: want 404, got %d", code)
+	}
+	if code := authorize(bob); code != http.StatusSeeOther {
+		t.Fatalf("authorize: want 303, got %d", code)
+	}
+	sess, err := st.GetSession(ctx, key.ID, now)
+	if err != nil {
+		t.Fatalf("session must exist: %v", err)
+	}
+	if d := sess.ExpiresAt.Sub(now); d < 9*time.Minute || d > 11*time.Minute {
+		t.Fatalf("session must follow the key TTL, got %v", d)
+	}
+	if err := st.RevokeKey(ctx, key.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteSession(ctx, key.ID); err != nil {
+		t.Fatal(err)
+	}
+	if code := authorize(bob); code != http.StatusNotFound {
+		t.Fatalf("revoked key: want 404, got %d", code)
+	}
+}

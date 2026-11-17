@@ -45,12 +45,12 @@ type Payload struct {
 func EnsureKeys(stateDir string) (Keys, error) {
 	path := filepath.Join(stateDir, KeysFile)
 	var k Keys
-	b, err := os.ReadFile(path)
+	b, err := store.ReadOwnerOnly(path)
 	if err == nil {
 		if json.Unmarshal(b, &k) != nil || k.Public == "" || k.Private == "" {
 			return Keys{}, fmt.Errorf("webpush: %s is not a valid key file", path)
 		}
-		return k, os.Chmod(path, 0o600)
+		return k, nil
 	}
 	if !os.IsNotExist(err) {
 		return Keys{}, fmt.Errorf("webpush: read %s: %w", path, err)

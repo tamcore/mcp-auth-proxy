@@ -82,6 +82,9 @@ func (ui *WebUI) handleLogout(w http.ResponseWriter, r *http.Request) {
 		cutoff := time.Unix(ui.sessions.now().Unix()+1, 0).UTC() // cookies carry whole seconds
 		if err := ui.store.SetSessionsSince(r.Context(), user.ID, cutoff); err != nil {
 			ui.logger.Error("logout: end sessions", "user", user.Username, "error", err)
+			ui.sessions.Clear(w)
+			http.Error(w, "could not log out other sessions; try again", http.StatusInternalServerError)
+			return
 		}
 	}
 	ui.sessions.Clear(w)

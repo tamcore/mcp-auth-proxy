@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -174,7 +175,11 @@ func (ui *WebUI) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	_ = ui.store.RevokeKey(r.Context(), id, time.Now().UTC())
+	if err := ui.store.RevokeKey(r.Context(), id, time.Now().UTC()); err != nil {
+		ui.logger.Error("revoke key", "key", id, "error", err)
+		http.Error(w, "could not revoke key", http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -197,6 +202,33 @@ func (ui *WebUI) handleEndKeySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ui.logger.Info("key session ended", "key", key.ID, "user", user.Username)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// handleAuthorizeKey grants one of the user's keys a session ahead of its
+// next tool call.
+func (ui *WebUI) handleAuthorizeKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := ui.sessions.Require(w, r, ui.store)
+	if !ok {
+		return
+	}
+	_ = r.ParseForm()
+	key, err := ui.store.KeyByID(r.Context(), r.PostForm.Get("id"))
+	if err != nil || key.UserID == nil || *key.UserID != user.ID || key.Revoked() {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	expires, err := ui.approvals.Authorize(r.Context(), key)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		ui.logger.Error("authorize key", "key", key.ID, "error", err)
+		http.Error(w, "could not authorize key", http.StatusInternalServerError)
+		return
+	}
+	ui.logger.Info("key authorized from portal", "key", key.ID, "user", user.Username, "expires_at", expires)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

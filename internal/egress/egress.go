@@ -14,9 +14,11 @@ import (
 	"time"
 )
 
-// Allow opens destinations the guard would refuse: address prefixes, or
-// exact host names, which skip the address check whatever they resolve to.
+// Allow opens destinations the guard would refuse: everything (Any), address
+// prefixes, or exact host names, which skip the address check whatever they
+// resolve to.
 type Allow struct {
+	Any      bool
 	Prefixes []netip.Prefix
 	Hosts    map[string]bool
 }
@@ -54,6 +56,9 @@ func normalizeHost(h string) string { return strings.TrimSuffix(strings.ToLower(
 
 // Allowed reports whether ip may be dialed.
 func (g *Guard) Allowed(ip netip.Addr) bool {
+	if g.allow.Any {
+		return true
+	}
 	ip = ip.Unmap()
 	for _, p := range g.allow.Prefixes {
 		if p.Contains(ip) {

@@ -53,7 +53,7 @@ type Config struct {
 	Admins     []string
 	Upstreams  []UpstreamConfig
 	OAuth      OAuthConfig
-	// EgressAllow opens non-public prefixes for user-controlled destinations.
+	// EgressAllow limits user-controlled destinations; Any unless egress_restrict.
 	EgressAllow egress.Allow
 }
 
@@ -170,6 +170,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: egress_allow: %w", err)
 	}
+	allow.Any = !v.GetBool("egress_restrict")
 	cfg.EgressAllow = allow
 	if err := unmarshalSlice(v, "upstreams", &cfg.Upstreams); err != nil {
 		return nil, err

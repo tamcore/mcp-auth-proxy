@@ -91,3 +91,10 @@ func TestRedirectFromAListedHostIsChecked(t *testing.T) {
 		t.Fatal("a redirect from a listed host to an unlisted private address must fail")
 	}
 }
+
+func TestUnrestrictedGuardAllowsEverything(t *testing.T) {
+	g := New(Allow{Any: true})
+	if !g.Allowed(netip.MustParseAddr("127.0.0.1")) || !g.Allowed(netip.MustParseAddr("10.0.0.1")) {
+		t.Fatal("an unrestricted guard must allow private addresses")
+	}
+}

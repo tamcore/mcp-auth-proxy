@@ -235,3 +235,20 @@ func TestEgressAllowParsed(t *testing.T) {
 		t.Fatal("a malformed prefix must be rejected")
 	}
 }
+
+func TestEgressIsUnrestrictedByDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	if err := os.WriteFile(path, []byte("base_url: https://proxy.example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || !cfg.EgressAllow.Any {
+		t.Fatalf("default must allow any destination: %+v %v", cfg.EgressAllow, err)
+	}
+	if err := os.WriteFile(path, []byte("base_url: https://proxy.example\negress_restrict: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = Load(path); err != nil || cfg.EgressAllow.Any {
+		t.Fatalf("egress_restrict: true must enable the guard: %+v %v", cfg.EgressAllow, err)
+	}
+}

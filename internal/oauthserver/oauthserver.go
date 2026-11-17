@@ -308,7 +308,7 @@ func (s *Server) takeCode(code string) (*authCode, bool) {
 }
 
 func validChallenge(c string) bool {
-	b, err := base64.RawURLEncoding.DecodeString(c)
+	b, err := base64.RawURLEncoding.Strict().DecodeString(c)
 	return len(c) == challengeLen && err == nil && len(b) == sha256.Size
 }
 

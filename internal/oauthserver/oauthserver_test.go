@@ -185,6 +185,9 @@ func TestAuthorizeFailClosedMatrix(t *testing.T) {
 		"missing chall":  func(q url.Values) { q.Del("code_challenge") },
 		"short chall":    func(q url.Values) { q.Set("code_challenge", "abc") },
 		"padded chall":   func(q url.Values) { q.Set("code_challenge", challengeS256("v")+"=") },
+		"non-canonical chall": func(q url.Values) {
+			q.Set("code_challenge", strings.Repeat("A", 42)+"B")
+		},
 		"non-b64url chall": func(q url.Values) {
 			q.Set("code_challenge", strings.Repeat("+", 43))
 		},

@@ -98,3 +98,12 @@ func TestUnrestrictedGuardAllowsEverything(t *testing.T) {
 		t.Fatal("an unrestricted guard must allow private addresses")
 	}
 }
+
+func TestUnrestrictedTransportKeepsTheProxySetting(t *testing.T) {
+	if New(Allow{Any: true}).Transport().Proxy == nil {
+		t.Fatal("unrestricted mode must honour HTTP_PROXY like the default transport")
+	}
+	if New(Allow{}).Transport().Proxy != nil {
+		t.Fatal("restricted mode must ignore proxy settings")
+	}
+}

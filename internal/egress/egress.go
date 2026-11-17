@@ -93,10 +93,14 @@ func (g *Guard) control(_, address string, _ syscall.RawConn) error {
 }
 
 // Transport is an http.Transport that dials only allowed addresses. It
-// ignores proxy environment variables, which would bypass the check.
+// ignores proxy environment variables, which would bypass the check; an
+// unrestricted guard returns the default transport unchanged.
 func (g *Guard) Transport() *http.Transport {
-	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: g.control}
 	t := http.DefaultTransport.(*http.Transport).Clone()
+	if g.allow.Any {
+		return t
+	}
+	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: g.control}
 	t.Proxy = nil
 	open := &net.Dialer{Timeout: d.Timeout, KeepAlive: d.KeepAlive}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {

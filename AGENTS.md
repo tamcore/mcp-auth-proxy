@@ -32,6 +32,7 @@ internal/
   gate/                  OTP challenge/session state machine
   identity/              mak_/map_ credential resolution
   ntfy/                  per-user push (validate, publish) + log-only fallback; fans out to webpush
+  egress/                SSRF guard for user-controlled destinations (own upstreams, ntfy, Web Push)
   webpush/               Web Push to subscribed browsers/devices (VAPID keys, RFC 8291 via webpush-go)
   mcpserver/             per-key MCP server, namespaced tools, auth tool
   ui/                    HTML templates, Tailwind CSS, theme JS; /static/ handler

@@ -67,6 +67,7 @@
             {{range .Upstreams}}<span class="badge">{{.}}</span>{{end}}
           </div>
           <p class="muted mt-1 text-xs" data-testid="key-activity">Last seen {{when .LastUsed}} · last success {{when .LastSuccess}}{{if not .Revoked}} · {{with .AuthorizedUntil}}authorized until {{when .}}{{else}}not authorized{{end}}{{end}} · session {{.SessionTTL}}{{if not .CustomTTL}} (default){{end}}</p>
+          {{if or .AllowedNetworks .TrustedNetworks}}<p class="muted mt-1 text-xs" data-testid="key-networks">{{with .AllowedNetworks}}only from {{.}}{{end}}{{if and .AllowedNetworks .TrustedNetworks}} · {{end}}{{with .TrustedNetworks}}pre-authorized from {{.}}{{end}}</p>{{end}}
           {{if not .Revoked}}
           <div class="mt-1 flex flex-wrap gap-2">
             <form method="post" action="/portal/key/authorize">
@@ -106,6 +107,21 @@
                 <input class="field" id="ttl-{{.ID}}" type="text" name="ttl" value="{{.CustomTTL}}" placeholder="{{$.Data.DefaultTTL}}" pattern="[0-9hms. ]*" maxlength="16">
               </div>
               <button type="submit" class="btn-ghost">Save TTL</button>
+            </form>
+          </details>
+          <details class="mt-2">
+            <summary class="cursor-pointer text-sm text-teal-700 dark:text-teal-300">Edit networks</summary>
+            <form method="post" action="/portal/key/networks" class="mt-2 space-y-2">
+              <input type="hidden" name="id" value="{{.ID}}">
+              <div>
+                <label class="field-label" for="allowed-{{.ID}}">Only allow from <span class="muted">(CIDRs or addresses, comma-separated; empty allows any network; requests from elsewhere are refused)</span></label>
+                <input class="field w-full" id="allowed-{{.ID}}" type="text" name="allowed" value="{{.AllowedNetworks}}" placeholder="192.168.69.0/24" maxlength="2048">
+              </div>
+              <div>
+                <label class="field-label" for="trusted-{{.ID}}">Pre-authorized from <span class="muted">(tool calls from these networks need no one-time code; others ask as usual)</span></label>
+                <input class="field w-full" id="trusted-{{.ID}}" type="text" name="trusted" value="{{.TrustedNetworks}}" placeholder="192.168.69.211" maxlength="2048">
+              </div>
+              <button type="submit" class="btn-ghost">Save networks</button>
             </form>
           </details>
           {{end}}

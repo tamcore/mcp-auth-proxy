@@ -259,3 +259,22 @@ func TestEgressIsUnrestrictedByDefault(t *testing.T) {
 		t.Fatalf("egress_restrict: true must enable the guard: %+v %v", cfg.EgressAllow, err)
 	}
 }
+
+func TestTrustedProxiesParsed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	body := "base_url: https://proxy.example\ntrusted_proxies: [10.42.0.0/16, \"fd42::1\"]\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || len(cfg.TrustedProxies) != 2 || cfg.TrustedProxies[1].String() != "fd42::1/128" {
+		t.Fatalf("trusted_proxies: %v %v", cfg, err)
+	}
+	bad := "base_url: https://proxy.example\ntrusted_proxies: [gateway]\n"
+	if err := os.WriteFile(path, []byte(bad), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("want error for a non-CIDR trusted_proxies entry")
+	}
+}

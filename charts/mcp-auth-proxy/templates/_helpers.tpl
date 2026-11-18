@@ -51,6 +51,7 @@ state_dir: /data
 session_ttl: {{ .Values.config.sessionTTL | quote }}
 egress_restrict: {{ .Values.config.egressRestrict }}
 egress_allow: {{ .Values.config.egressAllow | toJson }}
+trusted_proxies: {{ .Values.config.trustedProxies | toJson }}
 {{- if not .Values.config.users }}{{ fail "config.users needs at least one user" }}{{ end }}
 users: {{ .Values.config.users | toJson }}
 admins: {{ .Values.config.admins | toJson }}

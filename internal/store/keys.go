@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"time"
 )
 
@@ -29,10 +30,14 @@ type Key struct {
 	// proxied tool call that returned without error.
 	LastUsedAt    *time.Time
 	LastSuccessAt *time.Time
+	// AllowedCIDRs, when non-empty, are the only networks the key works from;
+	// tool calls from TrustedCIDRs skip the one-time code.
+	AllowedCIDRs []netip.Prefix
+	TrustedCIDRs []netip.Prefix
 }
 
 const keyColumns = `id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at, user_id,
-    last_used_at, last_success_at`
+    last_used_at, last_success_at, allowed_cidrs, trusted_cidrs`
 
 // Revoked reports whether the key has been revoked.
 func (k *Key) Revoked() bool { return k.RevokedAt != nil }
@@ -50,10 +55,20 @@ func (s *Store) CreateKey(ctx context.Context, k *Key) error {
 	if k.UserID != nil {
 		userID = *k.UserID
 	}
+	allowed, err := json.Marshal(nonNil(k.AllowedCIDRs))
+	if err != nil {
+		return fmt.Errorf("store: marshal allowed_cidrs: %w", err)
+	}
+	trusted, err := json.Marshal(nonNil(k.TrustedCIDRs))
+	if err != nil {
+		return fmt.Errorf("store: marshal trusted_cidrs: %w", err)
+	}
 	_, err = s.db.ExecContext(ctx, `
-INSERT INTO keys (id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at, user_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		k.ID, k.Kind, k.Label, k.SecretHash, string(ups), k.TTLSeconds, FormatTime(k.CreatedAt), revoked, userID)
+INSERT INTO keys (id, kind, label, secret_hash, upstreams, ttl_seconds, created_at, revoked_at, user_id,
+    allowed_cidrs, trusted_cidrs)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		k.ID, k.Kind, k.Label, k.SecretHash, string(ups), k.TTLSeconds, FormatTime(k.CreatedAt), revoked, userID,
+		string(allowed), string(trusted))
 	if err != nil {
 		return fmt.Errorf("store: create key: %w", err)
 	}
@@ -144,6 +159,36 @@ func (s *Store) UpdateKeyTTL(ctx context.Context, id, userID string, ttlSeconds 
 	return nil
 }
 
+// UpdateKeyNetworks replaces the allowed and trusted networks of a key the user owns.
+func (s *Store) UpdateKeyNetworks(ctx context.Context, id, userID string, allowed, trusted []netip.Prefix) error {
+	a, err := json.Marshal(nonNil(allowed))
+	if err != nil {
+		return fmt.Errorf("store: marshal allowed_cidrs: %w", err)
+	}
+	t, err := json.Marshal(nonNil(trusted))
+	if err != nil {
+		return fmt.Errorf("store: marshal trusted_cidrs: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE keys SET allowed_cidrs = ?, trusted_cidrs = ? WHERE id = ? AND user_id = ?`,
+		string(a), string(t), id, userID)
+	if err != nil {
+		return fmt.Errorf("store: update key networks: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return fmt.Errorf("store: update key networks: %w", err)
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func nonNil(p []netip.Prefix) []netip.Prefix {
+	if p == nil {
+		return []netip.Prefix{}
+	}
+	return p
+}
+
 // MarkKeyUsed records an authenticated request with the key.
 func (s *Store) MarkKeyUsed(ctx context.Context, id string, at time.Time) error {
 	return s.setKeyTime(ctx, "last_used_at", id, at)
@@ -164,10 +209,10 @@ func (s *Store) setKeyTime(ctx context.Context, column, id string, at time.Time)
 
 func scanKeyRow(sc scanner) (*Key, error) {
 	var k Key
-	var ups, created string
+	var ups, created, allowed, trusted string
 	var revoked, userID, used, success any
 	cols := []any{&k.ID, &k.Kind, &k.Label, &k.SecretHash, &ups, &k.TTLSeconds, &created, &revoked, &userID,
-		&used, &success}
+		&used, &success, &allowed, &trusted}
 	if err := sc.Scan(cols...); err != nil {
 		if isNoRows(err) {
 			return nil, ErrNotFound
@@ -176,6 +221,12 @@ func scanKeyRow(sc scanner) (*Key, error) {
 	}
 	if err := json.Unmarshal([]byte(ups), &k.Upstreams); err != nil {
 		return nil, fmt.Errorf("store: decode upstreams for key %s: %w", k.ID, err)
+	}
+	if err := json.Unmarshal([]byte(allowed), &k.AllowedCIDRs); err != nil {
+		return nil, fmt.Errorf("store: decode allowed_cidrs for key %s: %w", k.ID, err)
+	}
+	if err := json.Unmarshal([]byte(trusted), &k.TrustedCIDRs); err != nil {
+		return nil, fmt.Errorf("store: decode trusted_cidrs for key %s: %w", k.ID, err)
 	}
 	var err error
 	if k.CreatedAt, err = ParseTime(created); err != nil {

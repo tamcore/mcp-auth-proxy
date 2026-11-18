@@ -44,6 +44,13 @@ Under **Settings** (`/settings`) users change their password (all their other br
 
 5. The client retries the original call — it now runs. The session allows further calls until it expires (`session_ttl`, default 8h; per-key override in the portal or with `key create --ttl`). To skip the code, use **Authorize now** on the key in the portal before the call; **End session** revokes the authorization early.
 
+Per key, **Edit networks** in the portal sets two optional lists of CIDRs or addresses:
+
+- **Only allow from**: requests from any other network get a 403, `tools/list` included. Empty allows any network.
+- **Pre-authorized from**: tool calls from these networks run without a one-time code; calls from elsewhere ask for one as usual.
+
+The client address is the TCP peer, or, behind a reverse proxy listed in `trusted_proxies`, the rightmost `X-Forwarded-For` entry. Never pre-authorize a network that other clients share through a proxy or tunnel, e.g. the cluster pod network.
+
 Instead of the code you can tap **Approve** in the notification; the button URL is `{base_url}/approve/{id}?sig=hmac-sha256(id, sign.secret)` (the signing secret lives at `{state_dir}/sign.secret`, mode 0600). A wrong or missing signature is a 403. Opening the URL in a browser (GET) only shows a confirmation button; only the POST acts, so link previews cannot approve.
 
 ## Upstream OAuth

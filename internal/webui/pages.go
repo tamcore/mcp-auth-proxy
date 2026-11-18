@@ -43,6 +43,7 @@ func portalData(globals []config.UpstreamConfig, own []*store.UserUpstream,
 		v := view.Key{
 			ID: k.ID, Label: k.Label, Kind: k.Kind, Upstreams: k.Upstreams, Revoked: k.Revoked(),
 			LastUsed: k.LastUsedAt, LastSuccess: k.LastSuccessAt, SessionTTL: formatTTL(cfg.SessionTTL),
+			AllowedNetworks: formatNetworks(k.AllowedCIDRs), TrustedNetworks: formatNetworks(k.TrustedCIDRs),
 		}
 		if k.TTLSeconds > 0 {
 			v.CustomTTL = formatTTL(time.Duration(k.TTLSeconds) * time.Second)

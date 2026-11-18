@@ -28,6 +28,11 @@ session_ttl: 8h
 egress_restrict: false
 egress_allow: []
 
+# Proxies in front of the app (CIDRs). When the peer is one of them, the client
+# is the rightmost X-Forwarded-For entry; entries further left are ignored.
+# Needed for per-key networks behind a reverse proxy. Empty: the peer address.
+trusted_proxies: []
+
 otp:
   digits: 5            # one-time code length
   expiry: 3m           # code lifetime

@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/tamcore/mcp-auth-proxy/internal/clientip"
 	"github.com/tamcore/mcp-auth-proxy/internal/egress"
 )
 
@@ -55,6 +57,8 @@ type Config struct {
 	OAuth      OAuthConfig
 	// EgressAllow limits user-controlled destinations; Any unless egress_restrict.
 	EgressAllow egress.Allow
+	// TrustedProxies are the peers whose X-Forwarded-For names the client.
+	TrustedProxies []netip.Prefix
 }
 
 // OTPConfig holds the one-time-code gate tuning.
@@ -172,6 +176,9 @@ func Load(path string) (*Config, error) {
 	}
 	allow.Any = !v.GetBool("egress_restrict")
 	cfg.EgressAllow = allow
+	if cfg.TrustedProxies, err = clientip.ParsePrefixes(v.GetStringSlice("trusted_proxies")); err != nil {
+		return nil, fmt.Errorf("config: trusted_proxies: %w", err)
+	}
 	if err := unmarshalSlice(v, "upstreams", &cfg.Upstreams); err != nil {
 		return nil, err
 	}

@@ -33,7 +33,7 @@ func newTestSrv(t *testing.T) *Server {
 	return newTestSrvLogged(t, nil)
 }
 
-func newTestSrvLogged(t *testing.T, logger *slog.Logger) *Server {
+func newTestSrvLogged(t *testing.T, logger *slog.Logger, opts ...func(*config.Config)) *Server {
 	t.Helper()
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -54,6 +54,9 @@ func newTestSrvLogged(t *testing.T, logger *slog.Logger) *Server {
 		OTP:        config.OTPConfig{Digits: 5, Expiry: 3 * time.Minute, Attempts: 3, RenotifyFloor: 30 * time.Second},
 		Upstreams:  []config.UpstreamConfig{{Name: "echo", Command: []string{"true"}}},
 		OAuth:      config.OAuthConfig{TokenTTL: 24 * time.Hour, AuthorizeCodeTTL: 10 * time.Minute},
+	}
+	for _, o := range opts {
+		o(cfg)
 	}
 	g := gate.New(gate.Options{
 		Store: st, Digits: 5, Expiry: 3 * time.Minute, MaxAttempts: 3,

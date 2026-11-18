@@ -66,3 +66,4 @@ Secrets are shown once at creation and never again. Logs are JSON, carry only ha
 - [ ] The ops listener is reachable only from the cluster or host, never from the internet.
 - [ ] `state_dir` is on local, persistent storage, and exactly one replica runs against it.
 - [ ] The database and its backups have owner-only access.
+- [ ] With `trusted_proxies` set, only those proxies reach the app port (chart `networkPolicy`); any other peer in a trusted range can forge the client address that per-key networks check.

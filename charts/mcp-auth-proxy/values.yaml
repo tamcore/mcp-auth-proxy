@@ -43,6 +43,11 @@ config:
   # exact host names, e.g. ["192.168.1.0/24", "ntfy.example.com"]).
   egressRestrict: false
   egressAllow: []
+  # CIDRs of the reverse proxy / ingress pods in front of the app; their
+  # rightmost X-Forwarded-For entry is the client (for per-key networks).
+  # Every peer in these ranges is trusted to name the client: list only HTTP
+  # proxies, or enable networkPolicy so only they reach the app port.
+  trustedProxies: []
   logLevel: info
   # Usernames of the instance. Users missing from the database get a single-use
   # invite link in the pod log on start. Required.
@@ -71,6 +76,16 @@ persistence:
   accessMode: ReadWriteOnce
   size: 1Gi
   storageClass: ""
+
+# Limits who reaches the pod. With config.trustedProxies set, restrict
+# httpFrom to the reverse proxy pods: any other peer in a trusted range could
+# forge X-Forwarded-For. Entries are NetworkPolicyPeers; empty allows any.
+networkPolicy:
+  enabled: false
+  httpFrom: []
+  # e.g. - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: nginx-gateway}}
+  #        podSelector: {matchLabels: {app.kubernetes.io/name: nginx-gateway}}
+  opsFrom: []
 
 ingress:
   enabled: false

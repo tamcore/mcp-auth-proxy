@@ -44,6 +44,9 @@ type Key struct {
 	// the key follows session_ttl.
 	SessionTTL string
 	CustomTTL  string
+	// AllowedNetworks and TrustedNetworks are comma-separated CIDRs, empty if none.
+	AllowedNetworks string
+	TrustedNetworks string
 }
 
 // PortalData feeds portal.tmpl. NewToken is set once, right after creation.

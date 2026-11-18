@@ -258,14 +258,8 @@ func (p *Proxy) callProxied(ctx context.Context, key *store.Key,
 	upstreamName, toolName string, args json.RawMessage) (*mcp.CallToolResult, error) {
 	fullName := upstreamName + NamespaceSep + toolName
 	who := metrics.WhoOf(ctx, p.store, key)
-	if !p.gate.Check(ctx, key.ID) {
-		p.metrics.ToolCall(who, upstreamName, toolName, metrics.ToolBlocked, 0)
-		msg, err := p.gate.Block(ctx, key, fullName)
-		if err != nil {
-			p.logger.Error("gate block failed", "key", key.ID, "tool", fullName, "error", err)
-			return errorResult("Blocked: authorization could not be started. Retry the call."), nil
-		}
-		return errorResult(msg), nil
+	if blocked := p.gateBlocked(ctx, key, who, upstreamName, toolName); blocked != nil {
+		return blocked, nil
 	}
 	u, err := p.resolveUpstream(ctx, key, upstreamName)
 	if err != nil {

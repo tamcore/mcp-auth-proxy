@@ -12,7 +12,7 @@ mcp-auth-proxy is a personal MCP auth proxy written in Go. It fronts several MCP
 
 ### Identity is never authorization
 
-OAuth 2.x exists on both sides, but it only grants an *identity*: the right to list tools and ask for authorization. Every proxied tool call still requires the one-time code; only `tools/list` and the `auth` tool are ungated. Do not add any path that lets an authenticated identity skip the gate.
+OAuth 2.x exists on both sides, but it only grants an *identity*: the right to list tools and ask for authorization. Every proxied tool call still requires the one-time code; only `tools/list` and the `auth` tool are ungated. Do not add any path that lets an authenticated identity skip the gate. The one exception is a key's pre-authorized networks, which only the key's owner sets in the portal: tool calls whose client address (peer, or the rightmost `X-Forwarded-For` entry behind a `trusted_proxies` peer) is in them skip the code.
 
 ## Development workflow
 
@@ -33,6 +33,7 @@ internal/
   identity/              mak_/map_ credential resolution
   ntfy/                  per-user push (validate, publish) + log-only fallback; fans out to webpush
   egress/                SSRF guard for user-controlled destinations (own upstreams, ntfy, Web Push)
+  clientip/              client address behind trusted proxies; CIDR parsing and matching
   webpush/               Web Push to subscribed browsers/devices (VAPID keys, RFC 8291 via webpush-go)
   mcpserver/             per-key MCP server, namespaced tools, auth tool
   ui/                    HTML templates, Tailwind CSS, theme JS; /static/ handler

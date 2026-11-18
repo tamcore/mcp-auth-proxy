@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/tamcore/mcp-auth-proxy/internal/clientip"
 	"github.com/tamcore/mcp-auth-proxy/internal/config"
 	"github.com/tamcore/mcp-auth-proxy/internal/gate"
 	"github.com/tamcore/mcp-auth-proxy/internal/identity"
@@ -188,11 +189,21 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			unauthorized(w)
 			return
 		}
+		addr := clientip.FromRequest(r, s.cfg.TrustedProxies)
+		if len(key.AllowedCIDRs) > 0 && !clientip.Contains(key.AllowedCIDRs, addr) {
+			s.logger.Warn("key refused: client network not allowed", "key", key.ID, "client", addr.String())
+			http.Error(w, "forbidden: this key is not allowed from this network", http.StatusForbidden)
+			return
+		}
 		// ponytail: one write per request; batch if request volume ever matters.
 		if err := s.store.MarkKeyUsed(r.Context(), key.ID, time.Now().UTC()); err != nil {
 			s.logger.Warn("mark key used", "key", key.ID, "error", err)
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, key)))
+		ctx := context.WithValue(r.Context(), ctxKey{}, key)
+		if clientip.Contains(key.TrustedCIDRs, addr) {
+			ctx = mcpserver.WithTrustedClient(ctx, addr)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

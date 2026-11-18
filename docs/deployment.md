@@ -48,6 +48,8 @@ helm install mcp-auth-proxy oci://ghcr.io/tamcore/charts/mcp-auth-proxy \
 
 Passkeys need https. With `httpRoute.httpsRedirect.enabled` the chart adds a permanent http → https redirect on the gateway's http listener, and the proxy sends HSTS whenever `base_url` is https. Pin `httpRoute.parentRefs[].sectionName` to the https listener; otherwise the app route also serves plain http.
 
+Behind a reverse proxy, set `config.trustedProxies` to the proxy pods' CIDR so per-key networks see the real client address, and enable `networkPolicy` with `httpFrom` selecting only those proxy pods: pod IPs change, so the CIDR is usually the whole pod network, and every other pod in it could otherwise forge `X-Forwarded-For`.
+
 The image trusts only public CAs. If a user's ntfy server or an upstream uses a private CA, pass its root certificate: `--set-file extraCACerts=root-ca.crt` (added to the system roots via `SSL_CERT_DIR`).
 
 ## HTTP routes
